@@ -88,7 +88,7 @@ def main():
 
     # Setup
     init_db()
-    output_dir = Path(__file__).parent.parent.parent / "results"
+    output_dir = Path(__file__).parent.parent / "results"
     output_dir.mkdir(exist_ok=True)
 
     # Step 1: Update universe

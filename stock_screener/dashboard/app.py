@@ -170,9 +170,9 @@ def detail_view(ticker: str):
             st.metric("Avg Vol(30d)", format_number(latest["Avg_Volume_30d"]))
 
         # Charts
-        st.plotly_chart(create_price_chart(df.tail(100)), use_container_width=True)
-        st.plotly_chart(create_rsi_chart(df.tail(100)), use_container_width=True)
-        st.plotly_chart(create_volume_chart(df.tail(100)), use_container_width=True)
+        st.plotly_chart(create_price_chart(df.tail(100)), width='stretch')
+        st.plotly_chart(create_rsi_chart(df.tail(100)), width='stretch')
+        st.plotly_chart(create_volume_chart(df.tail(100)), width='stretch')
 
         # Raw data table (last 10 days)
         st.subheader("Recent OHLCV Data")
@@ -184,7 +184,7 @@ def detail_view(ticker: str):
         display_df["Volume"] = display_df["Volume"].apply(format_number)
         display_df["RSI_14"] = display_df["RSI_14"].apply(lambda x: f"{x:.2f}" if not pd.isna(x) else "—")
 
-        st.dataframe(display_df, use_container_width=True, hide_index=True)
+        st.dataframe(display_df, width='stretch', hide_index=True)
 
     except Exception as e:
         st.error(f"Error loading details for {ticker}: {str(e)}")
@@ -214,7 +214,7 @@ def scanner_results_table(scanner_name: str, results: list):
         display_data.append(row)
 
     df_display = pd.DataFrame(display_data)
-    st.dataframe(df_display, use_container_width=True, hide_index=True)
+    st.dataframe(df_display, width='stretch', hide_index=True)
 
 
 def main():
