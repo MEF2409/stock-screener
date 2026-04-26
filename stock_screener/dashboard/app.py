@@ -39,16 +39,17 @@ def format_number(val):
 
 
 def create_price_chart(df: pd.DataFrame) -> go.Figure:
-    """Create an interactive price chart with MAs."""
+    """Create an interactive candlestick chart with MAs."""
     fig = go.Figure()
 
-    # Add candlestick-like lines for OHLC
-    fig.add_trace(go.Scatter(
+    # Add candlestick chart
+    fig.add_trace(go.Candlestick(
         x=df["Date"],
-        y=df["Close"],
-        mode="lines",
-        name="Close",
-        line=dict(color="royalblue", width=2),
+        open=df["Open"],
+        high=df["High"],
+        low=df["Low"],
+        close=df["Close"],
+        name="OHLC",
     ))
 
     fig.add_trace(go.Scatter(
@@ -76,7 +77,7 @@ def create_price_chart(df: pd.DataFrame) -> go.Figure:
     ))
 
     fig.update_layout(
-        title="Price with Moving Averages",
+        title="Candlestick Chart with Moving Averages",
         xaxis_title="Date",
         yaxis_title="Price ($)",
         hovermode="x unified",
@@ -157,8 +158,10 @@ def detail_view(ticker: str):
         df = enrich_ohlcv_with_indicators(df)
 
         # Summary stats
-        col1, col2, col3, col4 = st.columns(4)
+        col1, col2, col3, col4, col5, col6 = st.columns(6)
         latest = df.iloc[-1]
+        high_52w = df["High"].max()
+        low_52w = df["Low"].min()
 
         with col1:
             st.metric("Close", format_currency(latest["Close"]))
@@ -168,6 +171,10 @@ def detail_view(ticker: str):
             st.metric("Volume", format_number(latest["Volume"]))
         with col4:
             st.metric("Avg Vol(30d)", format_number(latest["Avg_Volume_30d"]))
+        with col5:
+            st.metric("52W High", format_currency(high_52w))
+        with col6:
+            st.metric("52W Low", format_currency(low_52w))
 
         # Charts
         st.plotly_chart(create_price_chart(df.tail(100)), width='stretch')
@@ -214,7 +221,37 @@ def scanner_results_table(scanner_name: str, results: list):
         display_data.append(row)
 
     df_display = pd.DataFrame(display_data)
+    
+    # Add sorting option
+    sort_options = ["Ticker"] + [col for col in df_display.columns if col != "Ticker"]
+    sort_by = st.selectbox(f"Sort {scanner_name} results by:", sort_options, key=f"sort_{scanner_name}")
+    
+    if sort_by != "Ticker":
+        # For numeric columns, sort numerically
+        if sort_by in ["Open", "Close", "Low", "High"]:
+            df_display[sort_by + "_num"] = df_display[sort_by].str.replace("$", "").str.replace(",", "").astype(float)
+            df_display = df_display.sort_values(sort_by + "_num", ascending=False)
+            df_display = df_display.drop(columns=[sort_by + "_num"])
+        elif sort_by == "Volume":
+            df_display[sort_by + "_num"] = df_display[sort_by].str.replace(",", "").astype(float)
+            df_display = df_display.sort_values(sort_by + "_num", ascending=False)
+            df_display = df_display.drop(columns=[sort_by + "_num"])
+        else:
+            df_display = df_display.sort_values(sort_by, ascending=False)
+    else:
+        df_display = df_display.sort_values("Ticker")
+    
     st.dataframe(df_display, width='stretch', hide_index=True)
+    
+    # Add download button
+    csv = df_display.to_csv(index=False)
+    st.download_button(
+        label=f"📥 Download {scanner_name} Results as CSV",
+        data=csv,
+        file_name=f"{scanner_name.lower().replace(' ', '_')}_results.csv",
+        mime="text/csv",
+        key=f"download_{scanner_name}"
+    )
 
 
 def main():
@@ -243,7 +280,8 @@ def main():
         ticker_input = st.text_input("Enter ticker to view details (e.g., AAPL):").upper()
 
     # Main content
-    tab_gap, tab_bull_div, tab_bear_div, tab_short = st.tabs([
+    tab_overview, tab_gap, tab_bull_div, tab_bear_div, tab_short = st.tabs([
+        "Overview",
         "Bull #1 — Runaway Gap",
         "Bull #2 — Bullish Divergence",
         "Bear #1 — Bearish Divergence",
@@ -252,6 +290,56 @@ def main():
 
     universe = get_universe()
     tickers = universe["ticker"].tolist()
+
+    # Tab 0: Overview
+    with tab_overview:
+        st.header("📊 Dashboard Overview")
+        
+        # Universe stats
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Total Stocks in Universe", len(tickers))
+        with col2:
+            st.metric("Last Data Refresh", "Today")  # Could be improved with actual date
+        with col3:
+            st.metric("Active Scanners", "4")
+
+        st.subheader("Scanner Results Summary")
+        
+        # Compute all scanner results
+        with st.spinner("Running all scanners..."):
+            runaway_results = []
+            bullish_results = []
+            bearish_results = []
+            gap_normal_results = []
+            
+            for ticker in tickers:
+                if scan_runaway_gap(ticker)["flagged"]:
+                    runaway_results.append(ticker)
+                if scan_bullish_divergence(ticker)["flagged"]:
+                    bullish_results.append(ticker)
+                if scan_bearish_divergence(ticker)["flagged"]:
+                    bearish_results.append(ticker)
+                if scan_gap_up_normal_volume(ticker)["flagged"]:
+                    gap_normal_results.append(ticker)
+
+        # Summary table
+        summary_data = {
+            "Scanner": ["Runaway Gap", "Bullish Divergence", "Bearish Divergence", "Gap Up Normal Volume"],
+            "Flags Found": [len(runaway_results), len(bullish_results), len(bearish_results), len(gap_normal_results)],
+            "Description": [
+                "Gap up on heavy volume",
+                "New 52w low with higher RSI",
+                "New 52w high with lower RSI", 
+                "Gap up on light volume below MAs"
+            ]
+        }
+        
+        summary_df = pd.DataFrame(summary_data)
+        st.dataframe(summary_df, width='stretch', hide_index=True)
+        
+        total_flags = sum(len(lst) for lst in [runaway_results, bullish_results, bearish_results, gap_normal_results])
+        st.success(f"**Total flags across all scanners: {total_flags}**")
 
     # Tab 1: Runaway Gap
     with tab_gap:
