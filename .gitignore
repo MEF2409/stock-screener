@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Environment / secrets
+.env
+.env.local
+*.key
+
+# SQLite database files
+db/*.db
+db/*.db-journal
+db/*.sqlite
+db/*.sqlite3
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+
+# Streamlit
+.streamlit/secrets.toml
+
+# Logs
+*.log
+logs/
