@@ -38,6 +38,10 @@ from stock_screener.auth.users import (
     signup as user_signup, list_users, set_status, delete_user,
     is_admin, get_approved_credentials, seed_from_yaml,
 )
+from stock_screener.trades.trades import (
+    add_trade, close_trade, delete_trade as remove_trade,
+    list_trades, compute_pnl, grade_closed_trade, suggest_exit,
+)
 
 
 # Bloomberg-terminal-style palette
@@ -775,6 +779,214 @@ def render_signal_density(days: int = 90):
         ))
     fig.update_layout(height=280, hovermode="x unified", yaxis_title="Signals")
     st.plotly_chart(style_plotly(fig, title=f"Signal Density · last {days} days"), width='stretch')
+
+
+def render_trades_tab(owner: str):
+    """Trade journal: log positions, see live P&L, grade closed trades."""
+    if not owner:
+        st.info("Log in to track trades.")
+        return
+
+    st.markdown(
+        f'<div style="color:{MUTED};font-size:0.85rem;margin-bottom:14px;">'
+        f'Log every trade you take. Open positions show live P&L + suggested exits. '
+        f'Closed trades get graded against the best price reached in the 30 days after exit.'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+    # ---- Add trade form ----
+    with st.expander("➕ Log a new trade", expanded=False):
+        with st.form("add_trade", clear_on_submit=True):
+            f1, f2, f3 = st.columns(3)
+            with f1:
+                t_ticker = st.text_input("Ticker", placeholder="AAPL").upper().strip()
+                t_side = st.selectbox("Side", ["long", "short"])
+            with f2:
+                t_entry_date = st.date_input("Entry date", value=datetime.now().date())
+                t_entry_price = st.number_input("Entry price", min_value=0.01, value=100.00, step=0.01, format="%.2f")
+            with f3:
+                t_shares = st.number_input("Shares", min_value=1, value=100, step=1)
+                t_already_closed = st.checkbox("Already closed?")
+            t_exit_date = None
+            t_exit_price = None
+            if t_already_closed:
+                e1, e2 = st.columns(2)
+                with e1:
+                    t_exit_date = st.date_input("Exit date", value=datetime.now().date(), key="add_exit_date")
+                with e2:
+                    t_exit_price = st.number_input("Exit price", min_value=0.01, value=100.00, step=0.01, format="%.2f", key="add_exit_price")
+            t_notes = st.text_input("Notes (optional)")
+
+            if st.form_submit_button("Save trade", type="primary"):
+                if not t_ticker:
+                    st.error("Ticker required.")
+                else:
+                    add_trade(
+                        owner=owner, ticker=t_ticker, side=t_side,
+                        entry_date=t_entry_date.isoformat(), entry_price=t_entry_price,
+                        shares=t_shares,
+                        exit_date=t_exit_date.isoformat() if t_exit_date else None,
+                        exit_price=t_exit_price if t_already_closed else None,
+                        notes=t_notes,
+                    )
+                    st.success(f"Logged {t_side} {t_shares} {t_ticker} @ ${t_entry_price:.2f}")
+                    st.rerun()
+
+    # ---- Open positions ----
+    open_df = list_trades(owner, status="open")
+    closed_df = list_trades(owner, status="closed")
+
+    st.markdown('<div class="mp-section-label">Open Positions</div>', unsafe_allow_html=True)
+    if open_df.empty:
+        st.markdown(
+            '<div class="mp-empty"><div class="mp-empty-icon">○</div>'
+            'No open trades. Log one above.</div>',
+            unsafe_allow_html=True,
+        )
+    else:
+        total_unrealized = 0.0
+        for _, t in open_df.iterrows():
+            trade = t.to_dict()
+            try:
+                df = get_ohlcv(trade["ticker"])
+                current = float(df.iloc[-1]["Close"]) if not df.empty else None
+            except Exception:
+                df, current = None, None
+            pnl_info = compute_pnl(trade, current_price=current)
+            pnl = pnl_info.get("pnl") or 0
+            pct = pnl_info.get("pct") or 0
+            total_unrealized += pnl
+
+            color = BULL if pnl >= 0 else BEAR
+            sign = "+" if pnl >= 0 else ""
+            hints = suggest_exit(trade, df) if df is not None else []
+
+            with st.container():
+                cols = st.columns([2, 1, 1, 1, 1, 1])
+                with cols[0]:
+                    st.markdown(
+                        f"<div style='font-family:JetBrains Mono,monospace;font-weight:700;color:{ACCENT};font-size:1.1rem;'>"
+                        f"{trade['ticker']} <span style='color:{MUTED};font-weight:400;font-size:0.8rem;'>· "
+                        f"{trade['side'].upper()} · {trade['shares']} sh</span></div>"
+                        f"<div style='color:{MUTED};font-size:0.78rem;'>Entered {trade['entry_date']} @ ${trade['entry_price']:.2f}</div>",
+                        unsafe_allow_html=True,
+                    )
+                with cols[1]:
+                    st.markdown(detail_stat("Mark", f"${current:.2f}" if current else "—"), unsafe_allow_html=True)
+                with cols[2]:
+                    st.markdown(detail_stat("P&L", f"{sign}${pnl:,.2f}",
+                                            color="bull" if pnl >= 0 else "bear"), unsafe_allow_html=True)
+                with cols[3]:
+                    st.markdown(detail_stat("Return", f"{sign}{pct:.2f}%",
+                                            color="bull" if pct >= 0 else "bear"), unsafe_allow_html=True)
+                with cols[4]:
+                    new_exit = st.number_input(
+                        "Close at $", min_value=0.0, value=float(current or trade["entry_price"]),
+                        step=0.01, format="%.2f", key=f"close_price_{trade['id']}",
+                        label_visibility="collapsed",
+                    )
+                with cols[5]:
+                    if st.button("Close", key=f"close_btn_{trade['id']}", use_container_width=True):
+                        close_trade(trade["id"], datetime.now().date().isoformat(), new_exit)
+                        st.success(f"Closed {trade['ticker']} @ ${new_exit:.2f}")
+                        st.rerun()
+
+                if hints:
+                    st.markdown(
+                        f"<div style='background:rgba(217,153,34,0.08);border-left:3px solid {WARN};"
+                        f"padding:8px 12px;border-radius:6px;margin:6px 0 14px 0;font-size:0.82rem;'>"
+                        f"<strong style='color:{WARN};'>💡 Exit signals:</strong> "
+                        f"{' · '.join(hints)}</div>",
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+
+        st.markdown(
+            f"<div style='font-family:JetBrains Mono,monospace;font-size:0.95rem;text-align:right;"
+            f"margin-top:8px;color:{BULL if total_unrealized >= 0 else BEAR};font-weight:700;'>"
+            f"Unrealized total: {'+' if total_unrealized >= 0 else ''}${total_unrealized:,.2f}</div>",
+            unsafe_allow_html=True,
+        )
+
+    # ---- Closed trades + grading ----
+    st.markdown('<div class="mp-section-label" style="margin-top:32px;">Closed Trades</div>',
+                unsafe_allow_html=True)
+    if closed_df.empty:
+        st.markdown(
+            '<div class="mp-empty"><div class="mp-empty-icon">○</div>'
+            'No closed trades yet.</div>',
+            unsafe_allow_html=True,
+        )
+    else:
+        total_realized = 0.0
+        grades_capture = []
+        for _, t in closed_df.iterrows():
+            trade = t.to_dict()
+            pnl_info = compute_pnl(trade)
+            pnl = pnl_info.get("pnl") or 0
+            pct = pnl_info.get("pct") or 0
+            total_realized += pnl
+            grade_info = grade_closed_trade(trade) or {}
+            if grade_info.get("capture_pct") is not None:
+                grades_capture.append(grade_info["capture_pct"])
+
+            grade = grade_info.get("grade", "—")
+            grade_color = {"A": BULL, "B": "#a78bfa", "C": WARN, "D": "#fb923c", "F": BEAR}.get(grade, MUTED)
+
+            with st.container():
+                cols = st.columns([2, 1, 1, 1, 1])
+                with cols[0]:
+                    st.markdown(
+                        f"<div style='font-family:JetBrains Mono,monospace;font-weight:700;color:{ACCENT};font-size:1.05rem;'>"
+                        f"{trade['ticker']} <span style='color:{MUTED};font-weight:400;font-size:0.8rem;'>· "
+                        f"{trade['side'].upper()} · {trade['shares']} sh</span></div>"
+                        f"<div style='color:{MUTED};font-size:0.78rem;'>"
+                        f"{trade['entry_date']} → {trade['exit_date']} · "
+                        f"${trade['entry_price']:.2f} → ${trade['exit_price']:.2f}</div>",
+                        unsafe_allow_html=True,
+                    )
+                with cols[1]:
+                    st.markdown(detail_stat("P&L", f"{'+' if pnl >= 0 else ''}${pnl:,.2f}",
+                                            color="bull" if pnl >= 0 else "bear"), unsafe_allow_html=True)
+                with cols[2]:
+                    st.markdown(detail_stat("Return", f"{'+' if pct >= 0 else ''}{pct:.2f}%",
+                                            color="bull" if pct >= 0 else "bear"), unsafe_allow_html=True)
+                with cols[3]:
+                    capture = grade_info.get("capture_pct")
+                    cap_text = f"{capture:.0f}%" if capture is not None else "—"
+                    st.markdown(
+                        f"<div class='mp-stat'><div class='mp-stat-label'>Grade</div>"
+                        f"<div class='mp-stat-value' style='color:{grade_color};font-size:1.5rem;'>{grade}</div>"
+                        f"<div class='mp-stat-label' style='font-size:0.65rem;'>capture {cap_text}</div></div>",
+                        unsafe_allow_html=True,
+                    )
+                with cols[4]:
+                    if st.button("Delete", key=f"del_trade_{trade['id']}", use_container_width=True):
+                        remove_trade(trade["id"])
+                        st.rerun()
+
+                if grade_info.get("msg"):
+                    bg = "rgba(63,185,80,0.06)" if grade in ("A", "B") else "rgba(248,81,73,0.06)"
+                    border = BULL if grade in ("A", "B") else BEAR
+                    st.markdown(
+                        f"<div style='background:{bg};border-left:3px solid {border};"
+                        f"padding:8px 12px;border-radius:6px;margin:6px 0 14px 0;font-size:0.82rem;color:{TEXT};'>"
+                        f"📋 {grade_info['msg']}</div>",
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+
+        st.markdown(
+            f"<div style='font-family:JetBrains Mono,monospace;font-size:0.95rem;text-align:right;"
+            f"margin-top:8px;color:{BULL if total_realized >= 0 else BEAR};font-weight:700;'>"
+            f"Realized total: {'+' if total_realized >= 0 else ''}${total_realized:,.2f}"
+            + (f" · avg capture {sum(grades_capture)/len(grades_capture):.0f}%" if grades_capture else "")
+            + "</div>",
+            unsafe_allow_html=True,
+        )
 
 
 def render_backtest_tab(tickers: list[str]):
@@ -1807,8 +2019,9 @@ def main():
             render_scanner_section("Fade", gap_normal_results, fixed_height=GRID_CELL_HEIGHT)
     else:
         # Tabs view (default)
-        tab_overview, tab_all, tab_momentum, tab_reversal, tab_caution, tab_fade, tab_backtest = st.tabs([
-            "📊 Overview", "All Signals", "Momentum", "Reversal", "Caution", "Fade", "🧪 Backtest",
+        tab_overview, tab_all, tab_momentum, tab_reversal, tab_caution, tab_fade, tab_trades, tab_backtest = st.tabs([
+            "📊 Overview", "All Signals", "Momentum", "Reversal", "Caution", "Fade",
+            "💼 Trades", "🧪 Backtest",
         ])
 
         with tab_overview:
@@ -1857,6 +2070,8 @@ def main():
             render_scanner_section("Caution", bearish_results)
         with tab_fade:
             render_scanner_section("Fade", gap_normal_results)
+        with tab_trades:
+            render_trades_tab(owner=st.session_state.get("username", "anon"))
         with tab_backtest:
             render_backtest_tab(tickers)
 

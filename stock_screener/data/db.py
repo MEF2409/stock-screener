@@ -95,6 +95,25 @@ def init_db() -> None:
         )
     """)
 
+    # Trades — manual journal of executed positions for tracking + grading.
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS trades (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            owner TEXT NOT NULL,
+            ticker TEXT NOT NULL,
+            side TEXT NOT NULL,
+            entry_date TEXT NOT NULL,
+            entry_price REAL NOT NULL,
+            shares INTEGER NOT NULL,
+            exit_date TEXT,
+            exit_price REAL,
+            notes TEXT,
+            created_at TEXT NOT NULL
+        )
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_trades_owner ON trades(owner)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_trades_ticker ON trades(ticker)")
+
     conn.commit()
     conn.close()
 

@@ -1,0 +1,26 @@
+name: Morning Fade
+
+on:
+  schedule:
+    # 9:45 AM ET = 13:45 UTC EDT, 14:45 UTC EST. Run both to cover both DST states.
+    - cron: "45 13 * * 1-5"
+    - cron: "45 14 * * 1-5"
+  workflow_dispatch: {}
+
+jobs:
+  fade:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+      - name: Trigger morning fade on Fly machine
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          FLY_APP_NAME: ${{ secrets.FLY_APP_NAME }}
+        run: |
+          curl -L https://fly.io/install.sh | sh
+          export PATH="$HOME/.fly/bin:$PATH"
+          flyctl ssh console --app "$FLY_APP_NAME" --command "python /app/scripts/morning_fade.py"
