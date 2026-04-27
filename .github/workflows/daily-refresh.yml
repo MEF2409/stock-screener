@@ -1,0 +1,44 @@
+name: Daily Refresh
+
+on:
+  schedule:
+    # 4:30pm ET (20:30 UTC during EST, 21:30 UTC during EDT). Set both to be safe.
+    - cron: "30 20 * * 1-5"
+    - cron: "30 21 * * 1-5"
+  workflow_dispatch: {}  # allow manual trigger
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -e .
+
+      - name: Run daily refresh against the Fly volume via SSH
+        # We don't refresh in GH Actions directly because the SQLite DB
+        # lives on the Fly volume. Instead, trigger Fly to run the script.
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          FLY_APP_NAME: ${{ secrets.FLY_APP_NAME }}
+        run: |
+          curl -L https://fly.io/install.sh | sh
+          export PATH="$HOME/.fly/bin:$PATH"
+          flyctl ssh console --app "$FLY_APP_NAME" --command "python /app/scripts/daily_refresh.py"
+
+      - name: Upload logs as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: refresh-log-${{ github.run_id }}
+          path: refresh.log
+          if-no-files-found: ignore

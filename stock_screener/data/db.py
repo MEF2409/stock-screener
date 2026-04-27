@@ -18,7 +18,12 @@ def get_db_path() -> Path:
 def init_db() -> None:
     """Initialize database schema if it doesn't exist."""
     db_path = get_db_path()
-    db_path.parent.mkdir(parents=True, exist_ok=True)
+    # If db_path.parent is a symlink (containers do this for volume mounts),
+    # mkdir on the symlink fails when the target doesn't exist. Resolve to the
+    # real target and mkdir that instead.
+    parent = db_path.parent
+    target = parent.resolve() if parent.is_symlink() else parent
+    os.makedirs(target, exist_ok=True)
 
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
@@ -43,9 +48,18 @@ def init_db() -> None:
             ticker TEXT PRIMARY KEY,
             last_updated TEXT NOT NULL,
             price REAL NOT NULL,
-            avg_volume_30d INTEGER NOT NULL
+            avg_volume_30d INTEGER NOT NULL,
+            sector TEXT,
+            company_name TEXT
         )
     """)
+    # Add columns if they don't exist (idempotent migration)
+    cursor.execute("PRAGMA table_info(universe)")
+    cols = {row[1] for row in cursor.fetchall()}
+    if "sector" not in cols:
+        cursor.execute("ALTER TABLE universe ADD COLUMN sector TEXT")
+    if "company_name" not in cols:
+        cursor.execute("ALTER TABLE universe ADD COLUMN company_name TEXT")
 
     # Earnings dates table
     cursor.execute("""
@@ -53,6 +67,31 @@ def init_db() -> None:
             ticker TEXT PRIMARY KEY,
             next_earnings_date TEXT,
             last_updated TEXT NOT NULL
+        )
+    """)
+
+    # Daily snapshot of all flagged signals (for historical density / trends)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS scan_history (
+            run_date TEXT NOT NULL,
+            scanner TEXT NOT NULL,
+            ticker TEXT NOT NULL,
+            PRIMARY KEY (run_date, scanner, ticker)
+        )
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_scan_history_date ON scan_history(run_date)")
+
+    # Users table — accounts that can log in. status: pending/approved/rejected.
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            username TEXT PRIMARY KEY,
+            email TEXT,
+            name TEXT,
+            password_hash TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            is_admin INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            approved_at TEXT
         )
     """)
 

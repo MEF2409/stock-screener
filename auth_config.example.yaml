@@ -1,0 +1,20 @@
+# Example streamlit-authenticator config. Copy to auth_config.yaml,
+# generate hashed passwords (see DEPLOY.md), and point MP_AUTH_CONFIG at it.
+
+cookie:
+  name: market_pulse_auth
+  key: REPLACE_WITH_RANDOM_32_CHARS
+  expiry_days: 30
+
+credentials:
+  usernames:
+    mason:
+      email: mef2409@gmail.com
+      name: Mason
+      password: REPLACE_WITH_BCRYPT_HASH
+      logged_in: false
+      failed_login_attempts: 0
+
+# Optional: pre-authorized emails for self-signup (leave empty to disable)
+preauthorized:
+  emails: []

@@ -1,75 +1,114 @@
-"""Fetch and manage earnings calendar for stocks."""
+"""Fetch and manage earnings calendar for stocks.
 
-import yfinance as yf
+Primary source: Finnhub /calendar/earnings (bulk, fast).
+Fallback: yfinance.Ticker.info (per-ticker, slow) when no FINNHUB_API_KEY is set
+or the Finnhub call fails.
+"""
+
+import os
 from datetime import datetime, timedelta
+
 import pandas as pd
+import requests
+import yfinance as yf
 
 from stock_screener.data.db import get_connection
 
+FINNHUB_BASE = "https://finnhub.io/api/v1"
+FINNHUB_KEY = os.getenv("FINNHUB_API_KEY")
 
-def fetch_next_earnings_date(ticker: str) -> str:
-    """
-    Fetch the next earnings announcement date for a stock.
 
-    Args:
-        ticker: Stock ticker symbol
+def _fetch_finnhub_earnings_window(start: str, end: str) -> dict[str, str]:
+    """Fetch earnings calendar from Finnhub for a date window.
+    Returns {ticker: 'YYYY-MM-DD'} for the SOONEST date per ticker."""
+    if not FINNHUB_KEY:
+        return {}
+    try:
+        resp = requests.get(
+            f"{FINNHUB_BASE}/calendar/earnings",
+            params={"from": start, "to": end, "token": FINNHUB_KEY},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        data = resp.json().get("earningsCalendar", []) or []
+    except Exception:
+        return {}
 
-    Returns:
-        Earnings date as 'YYYY-MM-DD' string, or None if not available
+    out: dict[str, str] = {}
+    for row in data:
+        sym = row.get("symbol")
+        date = row.get("date")
+        if not sym or not date:
+            continue
+        # Keep earliest date if a ticker reports multiple times in the window
+        if sym not in out or date < out[sym]:
+            out[sym] = date
+    return out
 
-    Note: yfinance.Ticker.info is slow (~1-2 seconds per ticker). For production,
-    consider using Finnhub API or another data source with bulk earnings endpoints.
-    """
+
+def fetch_next_earnings_date(ticker: str) -> str | None:
+    """Fetch the next earnings date for a stock (single ticker, slow yfinance fallback)."""
     try:
         stock = yf.Ticker(ticker)
         info = stock.info
-
-        # yfinance provides earnings date as a Unix timestamp
         if "earningsDate" in info and info["earningsDate"]:
-            # earningsDate is a list of [start, end] timestamps
             earnings_ts = info["earningsDate"][0]
-            earnings_date = datetime.fromtimestamp(earnings_ts).strftime("%Y-%m-%d")
-            return earnings_date
-        else:
-            return None
-    except Exception as e:
-        return None
+            return datetime.fromtimestamp(earnings_ts).strftime("%Y-%m-%d")
+    except Exception:
+        pass
+    return None
 
 
-def update_earnings_calendar(tickers: list) -> None:
+def update_earnings_calendar(tickers: list, lookahead_days: int = 60) -> None:
     """
     Fetch and update earnings dates for a list of tickers in SQLite.
 
-    Args:
-        tickers: List of ticker symbols
+    Uses Finnhub bulk endpoint when FINNHUB_API_KEY is set; falls back to
+    per-ticker yfinance for any tickers Finnhub didn't return.
     """
     conn = get_connection()
     cursor = conn.cursor()
 
+    today = datetime.now().date()
+    start = today.isoformat()
+    end = (today + timedelta(days=lookahead_days)).isoformat()
+
+    finnhub_dates: dict[str, str] = {}
+    if FINNHUB_KEY:
+        print(f"Fetching earnings from Finnhub: {start} to {end}")
+        finnhub_dates = _fetch_finnhub_earnings_window(start, end)
+        print(f"  Finnhub returned {len(finnhub_dates)} ticker-dates")
+    else:
+        print("FINNHUB_API_KEY not set — falling back to yfinance (slow).")
+
     print(f"Updating earnings calendar for {len(tickers)} stocks...")
 
+    now = datetime.now().isoformat()
     success_count = 0
+    fallback_count = 0
     for i, ticker in enumerate(tickers):
-        if (i + 1) % 10 == 0:
+        if (i + 1) % 25 == 0:
             print(f"  Progress: {i + 1}/{len(tickers)}")
 
-        try:
+        earnings_date = finnhub_dates.get(ticker)
+        if not earnings_date:
+            # Finnhub didn't have it (or no key) — try yfinance
             earnings_date = fetch_next_earnings_date(ticker)
+            if earnings_date:
+                fallback_count += 1
 
-            cursor.execute("""
-                INSERT OR REPLACE INTO earnings (ticker, next_earnings_date, last_updated)
-                VALUES (?, ?, ?)
-            """, (ticker, earnings_date, datetime.now().isoformat()))
-
+        try:
+            cursor.execute(
+                "INSERT OR REPLACE INTO earnings (ticker, next_earnings_date, last_updated) VALUES (?, ?, ?)",
+                (ticker, earnings_date, now),
+            )
             success_count += 1
-        except Exception as e:
-            # Silently continue if fetch fails
+        except Exception:
             continue
 
     conn.commit()
     conn.close()
-
-    print(f"Earnings calendar updated: {success_count} stocks")
+    print(f"Earnings calendar updated: {success_count} stocks ({fallback_count} via yfinance fallback)")
 
 
 def has_earnings_within_days(ticker: str, days: int = 14) -> bool:

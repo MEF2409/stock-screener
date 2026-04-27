@@ -34,3 +34,4 @@ db/*.sqlite3
 # Logs
 *.log
 logs/
+auth_config.yaml

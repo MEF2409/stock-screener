@@ -18,10 +18,35 @@ import csv
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from stock_screener.data.db import init_db
+from stock_screener.data.db import init_db, get_connection
 from stock_screener.data.bulk_refresh import refresh_all_ohlcv
 from stock_screener.universe.builder import get_universe, update_universe
 from stock_screener.scanners.scanners import run_all_scanners
+from stock_screener.earnings.earnings import update_earnings_calendar
+from stock_screener.alerts.notifier import send_all
+
+
+def write_scan_history(results: dict) -> None:
+    """Snapshot today's flagged tickers into scan_history for trend charts."""
+    conn = get_connection()
+    cur = conn.cursor()
+    today = datetime.now().date().isoformat()
+    name_map = {
+        "runaway_gap": "Momentum",
+        "bullish_div": "Reversal",
+        "bearish_div": "Caution",
+        "gap_up_normal_vol": "Fade",
+    }
+    # Replace today's entries (rerun-safe)
+    cur.execute("DELETE FROM scan_history WHERE run_date = ?", (today,))
+    for scanner_key, label in name_map.items():
+        for flag in results.get(scanner_key, []):
+            cur.execute(
+                "INSERT OR REPLACE INTO scan_history (run_date, scanner, ticker) VALUES (?, ?, ?)",
+                (today, label, flag["ticker"]),
+            )
+    conn.commit()
+    conn.close()
 
 
 def export_results_to_json(results: dict, output_dir: Path) -> Path:
@@ -145,6 +170,36 @@ def main():
     except Exception as e:
         print(f"   ✗ Error: {e}")
         return
+
+    # Step 5: Snapshot scan history (for time-series charts)
+    print("\n5. Writing scan history snapshot...")
+    try:
+        write_scan_history(results)
+        print("   ✓ scan_history updated")
+    except Exception as e:
+        print(f"   ✗ Error: {e}")
+
+    # Step 6: Refresh earnings (cheap with Finnhub bulk endpoint)
+    print("\n6. Refreshing earnings calendar...")
+    try:
+        update_earnings_calendar(tickers=universe["ticker"].tolist())
+        print("   ✓ Earnings refreshed")
+    except Exception as e:
+        print(f"   ✗ Error: {e}")
+
+    # Step 7: Fire alerts (Slack/Discord/email — only those configured)
+    print("\n7. Sending alerts...")
+    try:
+        delivered = send_all(results)
+        for channel, ok in delivered.items():
+            if ok is None:
+                print(f"   - {channel}: not configured")
+            elif ok:
+                print(f"   ✓ {channel}: sent")
+            else:
+                print(f"   ✗ {channel}: failed")
+    except Exception as e:
+        print(f"   ✗ Error: {e}")
 
     print("\n" + "=" * 60)
     print(f"Completed: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
