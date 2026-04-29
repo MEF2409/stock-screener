@@ -58,10 +58,14 @@ def _pnl_pct(side: str, entry: float, mark: float) -> float:
     return (entry - mark) / entry * 100
 
 
-def _days_in_trade(entry_date: str) -> int:
+def _days_in_trade(entry_date: str, as_of: Optional[str] = None) -> int:
+    """Days from entry to `as_of` (defaults to today). When called from a
+    backtest, `as_of` is the snapshot's last bar date so the stat reflects
+    the simulation, not wall-clock time."""
     try:
         d = pd.to_datetime(entry_date).date()
-        return (datetime.now().date() - d).days
+        ref = pd.to_datetime(as_of).date() if as_of else datetime.now().date()
+        return max(0, (ref - d).days)
     except Exception:
         return 0
 
@@ -85,7 +89,7 @@ def _evaluate_fade(trade: dict, df: pd.DataFrame, v: ExitVerdict) -> None:
     entry = float(trade["entry_price"])
     mark = float(latest["Close"])
     pnl = _pnl_pct("short", entry, mark)
-    days = _days_in_trade(trade["entry_date"])
+    days = _days_in_trade(trade["entry_date"], as_of=str(latest.get("Date")))
 
     # Estimated cover targets / stops
     atr = _atr(df)
@@ -128,7 +132,7 @@ def _evaluate_momentum(trade: dict, df: pd.DataFrame, v: ExitVerdict) -> None:
     entry = float(trade["entry_price"])
     mark = float(latest["Close"])
     pnl = _pnl_pct("long", entry, mark)
-    days = _days_in_trade(trade["entry_date"])
+    days = _days_in_trade(trade["entry_date"], as_of=str(latest.get("Date")))
 
     atr = _atr(df)
     stop_below = entry * 0.96 if atr is None else entry - 1.5 * atr

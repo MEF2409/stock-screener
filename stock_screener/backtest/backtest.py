@@ -108,6 +108,129 @@ def backtest_scanner(scanner: str, tickers: list[str], start_date: str, end_date
     return pd.DataFrame(rows)
 
 
+_SETUP_TO_SCANNER = {
+    "momentum": "Momentum", "reversal": "Reversal",
+    "caution": "Caution", "fade": "Fade",
+}
+_SETUP_SIDE = {"momentum": "long", "reversal": "long", "caution": "short", "fade": "short"}
+
+
+def backtest_with_playbook(setup: str, tickers: list[str], start_date: str, end_date: str,
+                           max_hold_days: int = 30,
+                           progress_callback: Callable | None = None) -> pd.DataFrame:
+    """Replay scanner entries AND apply the exit playbook day-by-day.
+
+    For each (ticker, date) the scanner flags, simulate a trade entered at
+    that day's close, then walk forward calling `evaluate_exit` until the
+    playbook fires action='exit' or max_hold_days is hit. Records the
+    realized return so backtest stats reflect the actual trader experience,
+    not just fixed-horizon forward returns.
+
+    Returns DataFrame: ticker, setup, side, entry_date, entry_price,
+    exit_date, exit_price, exit_reason, hold_days, return_pct, max_dd_pct.
+    """
+    from stock_screener.exits import evaluate_exit
+    scanner = _SETUP_TO_SCANNER.get(setup.lower())
+    side = _SETUP_SIDE.get(setup.lower())
+    if not scanner or not side:
+        return pd.DataFrame()
+
+    rows = []
+    total = len(tickers)
+    for i, ticker in enumerate(tickers):
+        if progress_callback:
+            try: progress_callback(i + 1, total, ticker)
+            except Exception: pass
+        try:
+            df = get_ohlcv(ticker)
+            if df.empty:
+                continue
+            df = df.sort_values("Date").reset_index(drop=True)
+            mask = (df["Date"] >= start_date) & (df["Date"] <= end_date)
+            test_dates = df.loc[mask, "Date"].tolist()
+            for d in test_dates:
+                if not _historical_scan_at(ticker, df, d, scanner):
+                    continue
+                idx_list = df.index[df["Date"] == d].tolist()
+                if not idx_list:
+                    continue
+                entry_idx = idx_list[0]
+                entry_price = float(df.iloc[entry_idx]["Close"])
+                trade = {
+                    "ticker": ticker, "side": side, "setup": setup.lower(),
+                    "entry_date": d, "entry_price": entry_price, "shares": 1,
+                }
+
+                exit_idx = None
+                exit_reason = "max_hold"
+                running_extreme = entry_price  # for drawdown tracking
+                for offset in range(1, max_hold_days + 1):
+                    j = entry_idx + offset
+                    if j >= len(df):
+                        break
+                    snapshot = df.iloc[: j + 1].copy()
+                    px = float(df.iloc[j]["Close"])
+                    if side == "long":
+                        running_extreme = min(running_extreme, px)
+                    else:
+                        running_extreme = max(running_extreme, px)
+                    verdict = evaluate_exit(trade, snapshot)
+                    if verdict.action == "exit":
+                        exit_idx = j
+                        exit_reason = (verdict.rules_fired[0] if verdict.rules_fired
+                                       else "playbook_exit")
+                        break
+
+                if exit_idx is None:
+                    exit_idx = min(entry_idx + max_hold_days, len(df) - 1)
+
+                exit_price = float(df.iloc[exit_idx]["Close"])
+                exit_date = df.iloc[exit_idx]["Date"]
+                hold_days = exit_idx - entry_idx
+                if side == "long":
+                    ret_pct = (exit_price - entry_price) / entry_price * 100
+                    max_dd = (running_extreme - entry_price) / entry_price * 100
+                else:
+                    ret_pct = (entry_price - exit_price) / entry_price * 100
+                    max_dd = (entry_price - running_extreme) / entry_price * 100
+
+                rows.append({
+                    "ticker": ticker, "setup": setup.lower(), "side": side,
+                    "entry_date": d, "entry_price": entry_price,
+                    "exit_date": exit_date, "exit_price": exit_price,
+                    "exit_reason": exit_reason[:80],
+                    "hold_days": hold_days,
+                    "return_pct": ret_pct,
+                    "max_dd_pct": max_dd,
+                })
+        except Exception:
+            continue
+    return pd.DataFrame(rows)
+
+
+def summarize_playbook(results: pd.DataFrame) -> dict:
+    """Aggregate stats from a playbook backtest: trades, win rate, profit
+    factor, avg return, avg hold, expectancy."""
+    if results.empty:
+        return {"trades": 0}
+    wins = results[results["return_pct"] > 0]["return_pct"]
+    losses = results[results["return_pct"] <= 0]["return_pct"]
+    gross_w = float(wins.sum())
+    gross_l = float(abs(losses.sum()))
+    pf = (gross_w / gross_l) if gross_l > 0 else (float("inf") if gross_w > 0 else 0)
+    return {
+        "trades": int(len(results)),
+        "win_rate": float((results["return_pct"] > 0).mean() * 100),
+        "avg_return": float(results["return_pct"].mean()),
+        "median_return": float(results["return_pct"].median()),
+        "profit_factor": pf,
+        "avg_hold_days": float(results["hold_days"].mean()),
+        "best": float(results["return_pct"].max()),
+        "worst": float(results["return_pct"].min()),
+        "avg_max_dd": float(results["max_dd_pct"].mean()),
+    }
+
+
 def summarize_results(results: pd.DataFrame, forward_days: tuple = (1, 5, 20)) -> dict:
     """Roll-up stats: hit rate (% positive), mean / median return, count, by horizon."""
     if results.empty:

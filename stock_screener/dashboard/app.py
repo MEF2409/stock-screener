@@ -33,7 +33,10 @@ from stock_screener.scanners.scanners import (
     scan_bearish_divergence,
     scan_gap_up_normal_volume,
 )
-from stock_screener.backtest.backtest import backtest_scanner, summarize_results
+from stock_screener.backtest.backtest import (
+    backtest_scanner, summarize_results,
+    backtest_with_playbook, summarize_playbook,
+)
 from stock_screener.auth.users import (
     signup as user_signup, list_users, set_status, delete_user,
     is_admin, get_approved_credentials, seed_from_yaml,
@@ -1182,6 +1185,14 @@ def render_backtest_tab(tickers: list[str]):
         end_date = st.date_input("End date", value=datetime.now().date(), key="bt_end")
     with bc3:
         days_back = st.number_input("Lookback (days)", min_value=20, max_value=365, value=120, step=10, key="bt_lookback")
+    apply_playbook = st.checkbox(
+        "Apply exit playbook (simulate full trades, not fixed-horizon returns)",
+        value=False, key="bt_playbook",
+        help="When on: each signal becomes a simulated trade exited via the setup's "
+             "playbook rules. Stats reflect the actual realized return per trade rather "
+             "than 1d/5d/20d Close→Close. Use this to evaluate whether your exits "
+             "actually work.",
+    )
     start_date = (end_date - timedelta(days=days_back)).isoformat()
 
     if st.button("▶ Run backtest", type="primary", key="bt_run"):
@@ -1196,15 +1207,27 @@ def render_backtest_tab(tickers: list[str]):
                 unsafe_allow_html=True,
             )
 
-        results = backtest_scanner(
-            scanner=scanner, tickers=tickers,
-            start_date=start_date, end_date=end_date.isoformat(),
-            forward_days=(1, 5, 20), progress_callback=cb,
-        )
+        if apply_playbook:
+            setup_map = {"Momentum": "momentum", "Reversal": "reversal",
+                         "Caution": "caution", "Fade": "fade"}
+            results = backtest_with_playbook(
+                setup=setup_map[scanner], tickers=tickers,
+                start_date=start_date, end_date=end_date.isoformat(),
+                max_hold_days=30, progress_callback=cb,
+            )
+        else:
+            results = backtest_scanner(
+                scanner=scanner, tickers=tickers,
+                start_date=start_date, end_date=end_date.isoformat(),
+                forward_days=(1, 5, 20), progress_callback=cb,
+            )
         progress_bar.empty()
         status_box.empty()
         st.session_state["bt_results"] = results
-        st.session_state["bt_meta"] = {"scanner": scanner, "start": start_date, "end": end_date.isoformat()}
+        st.session_state["bt_meta"] = {
+            "scanner": scanner, "start": start_date, "end": end_date.isoformat(),
+            "playbook": apply_playbook,
+        }
 
     results = st.session_state.get("bt_results")
     meta = st.session_state.get("bt_meta", {})
@@ -1216,33 +1239,75 @@ def render_backtest_tab(tickers: list[str]):
         )
         return
 
-    summary = summarize_results(results, forward_days=(1, 5, 20))
-    st.markdown(
-        f'<div style="margin:14px 0;color:{MUTED};font-size:0.82rem;">'
-        f'{meta.get("scanner")} · {meta.get("start")} → {meta.get("end")} · '
-        f'<strong style="color:{TEXT};">{summary["count"]} signals</strong></div>',
-        unsafe_allow_html=True,
-    )
+    if meta.get("playbook"):
+        # Playbook backtest: per-trade realized stats
+        pb = summarize_playbook(results)
+        mode_label = f"{meta.get('scanner')} (with playbook exits)"
+        st.markdown(
+            f'<div style="margin:14px 0;color:{MUTED};font-size:0.82rem;">'
+            f'{mode_label} · {meta.get("start")} → {meta.get("end")} · '
+            f'<strong style="color:{TEXT};">{pb["trades"]} simulated trades</strong></div>',
+            unsafe_allow_html=True,
+        )
+        c1, c2, c3, c4 = st.columns(4)
+        with c1:
+            st.markdown(detail_stat(
+                "Win Rate", f"{pb['win_rate']:.1f}%",
+                color="bull" if pb["win_rate"] >= 50 else "bear",
+            ), unsafe_allow_html=True)
+        with c2:
+            st.markdown(detail_stat(
+                "Avg Return", f"{pb['avg_return']:+.2f}%",
+                color="bull" if pb["avg_return"] > 0 else "bear",
+            ), unsafe_allow_html=True)
+        with c3:
+            pf = pb["profit_factor"]
+            pf_text = "∞" if pf == float("inf") else f"{pf:.2f}"
+            st.markdown(detail_stat(
+                "Profit Factor", pf_text,
+                color="bull" if pf >= 1.5 else ("bear" if pf < 1 else None),
+            ), unsafe_allow_html=True)
+        with c4:
+            st.markdown(detail_stat("Avg Hold", f"{pb['avg_hold_days']:.1f}d"),
+                        unsafe_allow_html=True)
+        c5, c6, c7 = st.columns(3)
+        with c5:
+            st.markdown(detail_stat("Best", f"{pb['best']:+.2f}%", color="bull"),
+                        unsafe_allow_html=True)
+        with c6:
+            st.markdown(detail_stat("Worst", f"{pb['worst']:+.2f}%", color="bear"),
+                        unsafe_allow_html=True)
+        with c7:
+            st.markdown(detail_stat("Avg Drawdown", f"{pb['avg_max_dd']:+.2f}%", color="bear"),
+                        unsafe_allow_html=True)
+    else:
+        summary = summarize_results(results, forward_days=(1, 5, 20))
+        st.markdown(
+            f'<div style="margin:14px 0;color:{MUTED};font-size:0.82rem;">'
+            f'{meta.get("scanner")} · {meta.get("start")} → {meta.get("end")} · '
+            f'<strong style="color:{TEXT};">{summary["count"]} signals</strong></div>',
+            unsafe_allow_html=True,
+        )
 
-    # Summary tiles per horizon
-    cols = st.columns(3)
-    for i, n in enumerate((1, 5, 20)):
-        s = summary.get(f"ret_{n}d")
-        with cols[i]:
-            if not s:
-                st.markdown(detail_stat(f"{n}D", "—"), unsafe_allow_html=True)
-                continue
-            color = "bull" if s["mean"] > 0 else "bear"
-            st.markdown(
-                detail_stat(
-                    f"{n}D Mean Return", f"{s['mean']:+.2f}%",
-                    color=color,
-                ) + detail_stat(
-                    f"{n}D Hit Rate", f"{s['hit_rate']:.1f}%",
-                    color="bull" if s["hit_rate"] >= 50 else "bear",
-                ),
-                unsafe_allow_html=True,
-            )
+        # Summary tiles per horizon
+        cols = st.columns(3)
+        for i, n in enumerate((1, 5, 20)):
+            s = summary.get(f"ret_{n}d")
+            with cols[i]:
+                if not s:
+                    st.markdown(detail_stat(f"{n}D", "—"), unsafe_allow_html=True)
+                    continue
+                color = "bull" if s["mean"] > 0 else "bear"
+                st.markdown(
+                    detail_stat(
+                        f"{n}D Mean Return", f"{s['mean']:+.2f}%",
+                        color=color,
+                    ) + detail_stat(
+                        f"{n}D Hit Rate", f"{s['hit_rate']:.1f}%",
+                        color="bull" if s["hit_rate"] >= 50 else "bear",
+                    ),
+                    unsafe_allow_html=True,
+                )
 
     # Trades table
     st.markdown('<div class="mp-section-label" style="margin-top:24px;">Trades</div>', unsafe_allow_html=True)
