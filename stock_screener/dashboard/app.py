@@ -1155,6 +1155,7 @@ def all_signals_table(scans: dict, filter_text: str = "", watchlist_tickers: set
             combined.append({
                 "Ticker": t,
                 "Scanner": scanner,
+                "Catalyst": (r.get("catalyst") or "none").lower(),
                 "Close": r.get("close"),
                 "RSI": r.get("rsi"),
                 "From High": r.get("_pct_from_high"),
@@ -1206,11 +1207,24 @@ def all_signals_table(scans: dict, filter_text: str = "", watchlist_tickers: set
     )
     numeric = {"fontFamily": "JetBrains Mono, monospace", "textAlign": "right", "color": TEXT}
 
+    catalyst_fmt = JsCode(
+        "function(p){if(p.value==='earnings')return '⚡ EARNINGS';"
+        "return '—';}"
+    )
+    catalyst_style = JsCode(
+        "function(p){if(p.value==='earnings')"
+        "return {color:'#d29922',fontWeight:'700',fontFamily:'Inter,sans-serif',"
+        "letterSpacing:'0.04em',fontSize:'0.75rem'};"
+        "return {color:'#6e7681',fontFamily:'Inter,sans-serif',fontSize:'0.85rem'};}"
+    )
+
     gb = GridOptionsBuilder.from_dataframe(df)
     gb.configure_default_column(sortable=True, filter=True, resizable=True, flex=1, unSortIcon=True)
     gb.configure_column("Ticker", cellStyle=ticker_style, valueFormatter=ticker_value_fmt, pinned="left", width=120)
     gb.configure_column("Scanner", cellStyle=scanner_color, width=120,
                         headerTooltip="Which scanner flagged this ticker.")
+    gb.configure_column("Catalyst", valueFormatter=catalyst_fmt, cellStyle=catalyst_style, width=120,
+                        headerTooltip="⚡ EARNINGS = company reported within the last 2 sessions, so the gap is the post-print reaction. Otherwise the gap has no immediate news catalyst.")
     gb.configure_column("Close", type=["numericColumn"], valueFormatter=currency_fmt, cellStyle=numeric)
     gb.configure_column("RSI", type=["numericColumn"], valueFormatter=rsi_fmt, cellStyle=numeric)
     gb.configure_column("From High", type=["numericColumn"], valueFormatter=pct_fmt, cellStyle=pct_style, width=110)
@@ -1468,7 +1482,7 @@ def scanner_results_table(scanner_name: str, results: list, filter_text: str = "
     rows = []
     for result in results:
         ticker = result["ticker"]
-        row = {"Ticker": ticker}
+        row = {"Ticker": ticker, "Catalyst": (result.get("catalyst") or "none").lower()}
         if "open" in result:
             row["Open"] = result.get("open")
             row["Close"] = result.get("close")
@@ -1566,6 +1580,20 @@ def scanner_results_table(scanner_name: str, results: list, filter_text: str = "
         pinned="left",
         width=120,
     )
+    catalyst_fmt = JsCode(
+        "function(p){if(p.value==='earnings')return '⚡ EARNINGS';return '—';}"
+    )
+    catalyst_style = JsCode(
+        "function(p){if(p.value==='earnings')"
+        "return {color:'#d29922',fontWeight:'700',fontFamily:'Inter,sans-serif',"
+        "letterSpacing:'0.04em',fontSize:'0.75rem'};"
+        "return {color:'#6e7681',fontFamily:'Inter,sans-serif',fontSize:'0.85rem'};}"
+    )
+    if "Catalyst" in df.columns:
+        gb.configure_column(
+            "Catalyst", valueFormatter=catalyst_fmt, cellStyle=catalyst_style, width=120,
+            headerTooltip="⚡ EARNINGS = company reported within the last 2 sessions, so the gap is the post-print reaction. Otherwise the gap has no immediate news catalyst.",
+        )
     col_tooltips = {
         "Open": "Today's opening price",
         "Close": "Today's closing price",

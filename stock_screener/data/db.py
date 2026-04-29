@@ -69,6 +69,12 @@ def init_db() -> None:
             last_updated TEXT NOT NULL
         )
     """)
+    # Additive: last_earnings_date so we can tag signals whose gap is the
+    # post-print reaction (catalyst='earnings' vs 'none').
+    cursor.execute("PRAGMA table_info(earnings)")
+    earnings_cols = {row[1] for row in cursor.fetchall()}
+    if "last_earnings_date" not in earnings_cols:
+        cursor.execute("ALTER TABLE earnings ADD COLUMN last_earnings_date TEXT")
 
     # Daily snapshot of all flagged signals (for historical density / trends)
     cursor.execute("""

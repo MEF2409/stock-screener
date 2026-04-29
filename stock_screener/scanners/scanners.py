@@ -9,7 +9,16 @@ from stock_screener.indicators.indicators import (
     get_52_week_high_low,
     get_previous_52_week_extremum,
 )
-from stock_screener.earnings.earnings import has_earnings_within_days
+from stock_screener.earnings.earnings import (
+    has_earnings_within_days,
+    had_earnings_within_past_days,
+)
+
+
+def _catalyst_for(ticker: str) -> str:
+    """Tag a flagged signal: 'earnings' if the company reported in the last
+    2 sessions (gap is the post-print reaction), else 'none'."""
+    return "earnings" if had_earnings_within_past_days(ticker, days=2) else "none"
 
 
 def _apply_universal_filters(ticker: str, is_flagged: bool) -> bool:
@@ -63,6 +72,7 @@ def scan_runaway_gap(ticker: str) -> dict:
             "close": today["Close"],
             "volume": today["Volume"],
             "avg_volume_30d": today["Avg_Volume_30d"],
+            "catalyst": _catalyst_for(ticker),
         }
     except Exception as e:
         return {"ticker": ticker, "flagged": False, "reason": f"Error: {str(e)}"}
@@ -123,6 +133,7 @@ def scan_bullish_divergence(ticker: str) -> dict:
             "rsi": today_rsi,
             "prev_low": prev_low_price,
             "prev_low_rsi": prev_low_rsi,
+            "catalyst": _catalyst_for(ticker),
         }
     except Exception as e:
         return {"ticker": ticker, "flagged": False, "reason": f"Error: {str(e)}"}
@@ -183,6 +194,7 @@ def scan_bearish_divergence(ticker: str) -> dict:
             "rsi": today_rsi,
             "prev_high": prev_high_price,
             "prev_high_rsi": prev_high_rsi,
+            "catalyst": _catalyst_for(ticker),
         }
     except Exception as e:
         return {"ticker": ticker, "flagged": False, "reason": f"Error: {str(e)}"}
@@ -239,6 +251,7 @@ def scan_gap_up_normal_volume(ticker: str) -> dict:
             "ma_50": today["MA_50"],
             "ma_100": today["MA_100"],
             "ma_200": today["MA_200"],
+            "catalyst": _catalyst_for(ticker),
         }
     except Exception as e:
         return {"ticker": ticker, "flagged": False, "reason": f"Error: {str(e)}"}
