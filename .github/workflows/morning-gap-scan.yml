@@ -1,0 +1,30 @@
+name: Morning Gap Scan
+
+on:
+  schedule:
+    # 9:32 AM ET = 13:32 UTC EDT, 14:32 UTC EST. Run both to cover DST states.
+    - cron: "32 13 * * 1-5"
+    - cron: "32 14 * * 1-5"
+  workflow_dispatch: {}
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Trigger gap scan on Fly machine
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          FLY_APP_NAME: ${{ secrets.FLY_APP_NAME }}
+        run: |
+          curl -L https://fly.io/install.sh | sh
+          export PATH="$HOME/.fly/bin:$PATH"
+          MACHINE_ID=$(flyctl machine list --app "$FLY_APP_NAME" --json | jq -r '.[0].id')
+          echo "Starting machine $MACHINE_ID..."
+          flyctl machine start "$MACHINE_ID" --app "$FLY_APP_NAME" || true
+          echo "Waiting 15s for boot..."
+          sleep 15
+          flyctl ssh console --app "$FLY_APP_NAME" --command "python /app/scripts/morning_gap_scan.py"
