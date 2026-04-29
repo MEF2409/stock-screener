@@ -1629,6 +1629,30 @@ def render_backtest_tab(tickers: list[str]):
 def all_signals_table(scans: dict, filter_text: str = "", watchlist_tickers: set = None):
     """Combined table showing every signal across all four scanners."""
     watchlist_tickers = watchlist_tickers or set()
+
+    # Detect setup conflicts: a ticker flagged by BOTH a long-side scanner
+    # (Momentum/Reversal) AND a short-side scanner (Caution/Fade) on the
+    # same day. The two playbooks disagree — the trader should know.
+    sides = {"Momentum": "long", "Reversal": "long", "Caution": "short", "Fade": "short"}
+    ticker_sides: dict[str, set[str]] = {}
+    for sc, side in sides.items():
+        for r in scans.get(sc, []):
+            ticker_sides.setdefault(r["ticker"], set()).add(side)
+    conflict_tickers = {t for t, s in ticker_sides.items() if len(s) > 1}
+    if conflict_tickers:
+        names = ", ".join(sorted(conflict_tickers)[:8])
+        more = f" (+{len(conflict_tickers) - 8} more)" if len(conflict_tickers) > 8 else ""
+        st.markdown(
+            f"<div style='background:rgba(217,153,34,0.10);border-left:3px solid {WARN};"
+            f"padding:10px 14px;border-radius:6px;margin:6px 0 14px 0;font-size:0.85rem;color:{TEXT};'>"
+            f"⚠️ <strong>Setup conflict</strong> on {len(conflict_tickers)} ticker"
+            f"{'s' if len(conflict_tickers) != 1 else ''}: <code>{names}{more}</code> — "
+            f"flagged by both a long and short scanner today. The playbooks disagree; "
+            f"don't take either side without resolving why."
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+
     combined = []
     for scanner in ("Momentum", "Reversal", "Caution", "Fade"):
         for r in scans.get(scanner, []):
@@ -1639,6 +1663,7 @@ def all_signals_table(scans: dict, filter_text: str = "", watchlist_tickers: set
             combined.append({
                 "Ticker": t,
                 "Scanner": scanner,
+                "Conflict": "⚠️" if t in conflict_tickers else "",
                 "Catalyst": (r.get("catalyst") or "none").lower(),
                 # `close` for gap-based scanners is the prior session's close.
                 # For Reversal/Caution it isn't populated (None). Either way
@@ -1710,6 +1735,8 @@ def all_signals_table(scans: dict, filter_text: str = "", watchlist_tickers: set
     gb.configure_column("Ticker", cellStyle=ticker_style, valueFormatter=ticker_value_fmt, pinned="left", width=120)
     gb.configure_column("Scanner", cellStyle=scanner_color, width=120,
                         headerTooltip="Which scanner flagged this ticker.")
+    gb.configure_column("Conflict", width=70, sortable=True,
+                        headerTooltip="⚠️ = this ticker was flagged by BOTH a long-side and short-side scanner today. The setups disagree.")
     gb.configure_column("Catalyst", valueFormatter=catalyst_fmt, cellStyle=catalyst_style, width=120,
                         headerTooltip="⚡ EARNINGS = company reported within the last 2 sessions, so the gap is the post-print reaction. Otherwise the gap has no immediate news catalyst.")
     gb.configure_column("Prior Close", type=["numericColumn"], valueFormatter=currency_fmt, cellStyle=numeric,
