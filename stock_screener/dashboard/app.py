@@ -789,6 +789,117 @@ def render_signal_density(days: int = 90):
     st.plotly_chart(style_plotly(fig, title=f"Signal Density · last {days} days"), width='stretch')
 
 
+def _render_portfolio_risk(open_df: pd.DataFrame, account_size: float) -> None:
+    """Aggregate risk across open trades. Per-trade sizing is handled in
+    the calculator; this is the portfolio view that catches over-concentration:
+    'I have 4 trades open, each 1% risk, but they're all longs in semis →
+    really one bet at 4%.'"""
+    from stock_screener.exits import evaluate_exit
+    total_notional = 0.0
+    total_risk = 0.0
+    longs = shorts = 0
+    setup_counts: dict[str, int] = {}
+    rows_with_risk = []
+
+    for _, t in open_df.iterrows():
+        trade = t.to_dict()
+        try:
+            df = get_ohlcv(trade["ticker"])
+            if df is None or df.empty:
+                continue
+            mark = float(df.iloc[-1]["Close"])
+            notional = mark * int(trade["shares"])
+            v = evaluate_exit(trade, df)
+            stop = v.key_levels.get("stop")
+            if stop is not None:
+                stop_dist = (
+                    float(trade["entry_price"]) - stop if trade["side"] == "long"
+                    else stop - float(trade["entry_price"])
+                )
+                if stop_dist > 0:
+                    risk = stop_dist * int(trade["shares"])
+                else:
+                    # Stop is on the wrong side of entry (already past it) — still
+                    # at risk for the full notional minus mark distance to stop.
+                    risk = abs(mark - stop) * int(trade["shares"])
+            else:
+                risk = notional * 0.05  # fallback: assume 5% stop
+            total_notional += notional
+            total_risk += risk
+            if trade["side"] == "long":
+                longs += 1
+            else:
+                shorts += 1
+            setup = (trade.get("setup") or "manual").lower()
+            setup_counts[setup] = setup_counts.get(setup, 0) + 1
+            rows_with_risk.append((trade["ticker"], trade["side"], setup, risk))
+        except Exception:
+            continue
+
+    if not rows_with_risk:
+        return
+
+    pct_of_acct_notional = total_notional / account_size * 100 if account_size else 0
+    pct_of_acct_risk = total_risk / account_size * 100 if account_size else 0
+    n_open = len(rows_with_risk)
+    side_lopsided = (longs == n_open or shorts == n_open) and n_open >= 3
+
+    st.markdown('<div class="mp-section-label">Portfolio Risk</div>', unsafe_allow_html=True)
+
+    risk_color = "bull" if pct_of_acct_risk < 3 else ("warn" if pct_of_acct_risk < 6 else "bear")
+    notional_color = "bull" if pct_of_acct_notional < 50 else ("warn" if pct_of_acct_notional < 100 else "bear")
+
+    cols = st.columns(4)
+    cols[0].markdown(detail_stat("Open Trades", f"{n_open}"), unsafe_allow_html=True)
+    cols[1].markdown(
+        detail_stat("Total Notional",
+                    f"${total_notional:,.0f}",
+                    color=notional_color),
+        unsafe_allow_html=True,
+    )
+    cols[2].markdown(
+        detail_stat("Total Risk @ Stop",
+                    f"${total_risk:,.0f} · {pct_of_acct_risk:.1f}% acct",
+                    color=risk_color),
+        unsafe_allow_html=True,
+    )
+    cols[3].markdown(
+        detail_stat("Long / Short", f"{longs} / {shorts}"),
+        unsafe_allow_html=True,
+    )
+
+    warnings = []
+    if pct_of_acct_risk >= 6:
+        warnings.append(
+            f"⚠️ Total stop-out risk is {pct_of_acct_risk:.1f}% of the account — "
+            f"a single bad day kills more than a single bad trade. Trim size or close one."
+        )
+    if pct_of_acct_notional > account_size * 0.0 + 100:
+        warnings.append(
+            f"⚠️ Notional ${total_notional:,.0f} exceeds account ${account_size:,.0f}. "
+            f"You're using leverage — verify your broker margin is what you think it is."
+        )
+    if side_lopsided:
+        side = "long" if longs == n_open else "short"
+        warnings.append(
+            f"⚠️ All {n_open} open trades are {side}. If the broad market moves against you, "
+            f"every position takes the hit at once — this isn't 4 trades, it's one bet."
+        )
+    if len(setup_counts) == 1 and n_open >= 3:
+        only_setup = next(iter(setup_counts))
+        warnings.append(
+            f"⚠️ All {n_open} open trades are the same setup ({only_setup}). "
+            f"If the playbook is wrong on this regime, every trade is wrong at once."
+        )
+    for w in warnings:
+        st.markdown(
+            f"<div style='background:rgba(248,81,73,0.08);border-left:3px solid {BEAR};"
+            f"padding:8px 12px;border-radius:6px;margin:6px 0;font-size:0.82rem;color:{TEXT};'>"
+            f"{w}</div>",
+            unsafe_allow_html=True,
+        )
+
+
 def _render_trade_replay(trade: dict) -> None:
     """Side-by-side: what the trader did vs what the playbook would have done.
 
@@ -1022,6 +1133,10 @@ def render_trades_tab(owner: str):
     # ---- Open positions ----
     open_df = list_trades(owner, status="open")
     closed_df = list_trades(owner, status="closed")
+
+    # ---- Portfolio risk dashboard ----
+    if not open_df.empty:
+        _render_portfolio_risk(open_df, account_size=float(st.session_state.get("acct_size", 10000.0)))
 
     st.markdown('<div class="mp-section-label">Open Positions</div>', unsafe_allow_html=True)
     if open_df.empty:
