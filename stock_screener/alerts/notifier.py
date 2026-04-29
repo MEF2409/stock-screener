@@ -17,26 +17,57 @@ SMTP_USER = os.getenv("SMTP_USER")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
 
 
+_SETUP_META = (
+    ("runaway_gap", "🚀 Momentum", "long"),
+    ("bullish_div", "🔄 Reversal", "long"),
+    ("bearish_div", "⚠️ Caution", "short"),
+    ("gap_up_normal_vol", "📉 Fade", "short"),
+)
+
+
+def _gap_pct(flag: dict) -> float | None:
+    """For gap-based setups: today's open vs prior close. Returns % or None."""
+    o = flag.get("open")
+    c = flag.get("close")  # for Fade scanner this is yesterday's close (gap reference)
+    if o is None or c is None or c == 0:
+        return None
+    return (float(o) - float(c)) / float(c) * 100
+
+
+def _format_signal_line(scanner_key: str, side: str, flag: dict) -> str:
+    """One human-readable line per ticker with the most actionable fact."""
+    parts = [f"*{flag['ticker']}*"]
+    gap = _gap_pct(flag) if scanner_key in ("runaway_gap", "gap_up_normal_vol") else None
+    if gap is not None:
+        sign = "+" if gap >= 0 else ""
+        parts.append(f"gap {sign}{gap:.1f}%")
+    rsi = flag.get("rsi")
+    if rsi is not None:
+        parts.append(f"RSI {rsi:.0f}")
+    if (flag.get("catalyst") or "").lower() == "earnings":
+        parts.append("⚡ EARNINGS")
+    return " · ".join(parts)
+
+
 def _format_slack(results: dict) -> dict:
-    """Slack/Discord-compatible message payload."""
+    """Slack/Discord-compatible message payload with per-ticker context."""
     total = sum(len(v) for v in results.values() if isinstance(v, list))
     blocks = [{
         "type": "header",
         "text": {"type": "plain_text", "text": f"📈 Market Pulse — {total} signals"},
     }]
-    for scanner, label in (("runaway_gap", "🚀 Momentum"),
-                           ("bullish_div", "🔄 Reversal"),
-                           ("bearish_div", "⚠️ Caution"),
-                           ("gap_up_normal_vol", "📉 Fade")):
+    for scanner, label, side in _SETUP_META:
         flags = results.get(scanner, [])
         if not flags:
             continue
-        tickers = ", ".join(f["ticker"] for f in flags[:15])
-        more = f" (+{len(flags) - 15} more)" if len(flags) > 15 else ""
+        # Sort: earnings catalysts first (most time-sensitive)
+        flags = sorted(flags, key=lambda f: 0 if (f.get("catalyst") or "").lower() == "earnings" else 1)
+        lines = [_format_signal_line(scanner, side, f) for f in flags[:15]]
+        more = f"\n_…and {len(flags) - 15} more_" if len(flags) > 15 else ""
         blocks.append({
             "type": "section",
             "text": {"type": "mrkdwn",
-                     "text": f"*{label}* ({len(flags)})\n`{tickers}{more}`"},
+                     "text": f"*{label}* ({len(flags)})\n" + "\n".join(lines) + more},
         })
     return {"blocks": blocks, "text": f"Market Pulse: {total} signals today"}
 
@@ -45,12 +76,19 @@ def _format_text(results: dict) -> str:
     total = sum(len(v) for v in results.values() if isinstance(v, list))
     lines = [f"Market Pulse — {datetime.now().strftime('%Y-%m-%d')}",
              f"{total} total signals", ""]
-    for scanner, label in (("runaway_gap", "Momentum"),
-                           ("bullish_div", "Reversal"),
-                           ("bearish_div", "Caution"),
-                           ("gap_up_normal_vol", "Fade")):
+    for scanner, label, side in _SETUP_META:
         flags = results.get(scanner, [])
-        lines.append(f"  {label} ({len(flags)}): {', '.join(f['ticker'] for f in flags) or '—'}")
+        lines.append(f"  {label.replace('🚀 ','').replace('🔄 ','').replace('⚠️ ','').replace('📉 ','')} ({len(flags)})")
+        if not flags:
+            continue
+        flags = sorted(flags, key=lambda f: 0 if (f.get("catalyst") or "").lower() == "earnings" else 1)
+        for f in flags[:20]:
+            tag = " [EARNINGS]" if (f.get("catalyst") or "").lower() == "earnings" else ""
+            gap = _gap_pct(f) if scanner in ("runaway_gap", "gap_up_normal_vol") else None
+            gap_s = f" gap {('+' if gap >= 0 else '')}{gap:.1f}%" if gap is not None else ""
+            lines.append(f"    - {f['ticker']}{gap_s}{tag}")
+        if len(flags) > 20:
+            lines.append(f"    …and {len(flags) - 20} more")
     return "\n".join(lines)
 
 
