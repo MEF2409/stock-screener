@@ -35,7 +35,7 @@ from stock_screener.scanners.scanners import (
 )
 from stock_screener.backtest.backtest import (
     backtest_scanner, summarize_results,
-    backtest_with_playbook, summarize_playbook,
+    backtest_with_playbook, summarize_playbook, walk_forward_backtest,
 )
 from stock_screener.auth.users import (
     signup as user_signup, list_users, set_status, delete_user,
@@ -1493,6 +1493,14 @@ def render_backtest_tab(tickers: list[str]):
              "than 1d/5d/20d Close→Close. Use this to evaluate whether your exits "
              "actually work.",
     )
+    walk_forward_n = 1
+    if apply_playbook:
+        walk_forward_n = st.slider(
+            "Walk-forward folds", min_value=1, max_value=6, value=1, key="bt_folds",
+            help="Split the lookback into N equal time windows and report per-fold "
+                 "stats. Stable profit factor across folds = robust rules. Wildly "
+                 "different per-fold = overfit to one regime.",
+        )
     start_date = (end_date - timedelta(days=days_back)).isoformat()
 
     if st.button("▶ Run backtest", type="primary", key="bt_run"):
@@ -1515,6 +1523,15 @@ def render_backtest_tab(tickers: list[str]):
                 start_date=start_date, end_date=end_date.isoformat(),
                 max_hold_days=30, progress_callback=cb,
             )
+            if walk_forward_n > 1:
+                folds = walk_forward_backtest(
+                    setup=setup_map[scanner], tickers=tickers,
+                    start_date=start_date, end_date=end_date.isoformat(),
+                    n_folds=walk_forward_n, max_hold_days=30, progress_callback=cb,
+                )
+                st.session_state["bt_folds"] = folds
+            else:
+                st.session_state["bt_folds"] = None
         else:
             results = backtest_scanner(
                 scanner=scanner, tickers=tickers,
@@ -1580,6 +1597,38 @@ def render_backtest_tab(tickers: list[str]):
         with c7:
             st.markdown(detail_stat("Avg Drawdown", f"{pb['avg_max_dd']:+.2f}%", color="bear"),
                         unsafe_allow_html=True)
+
+        # Walk-forward per-fold stats — robustness check
+        folds = st.session_state.get("bt_folds")
+        if folds:
+            st.markdown('<div class="mp-section-label" style="margin-top:18px;">Walk-Forward Folds</div>',
+                        unsafe_allow_html=True)
+            st.caption(
+                "Stats per equal-time fold of the lookback window. "
+                "Stable profit factor across folds = robust rules. Wildly varying = "
+                "the playbook fits one regime, not real edge."
+            )
+            fold_rows = []
+            for f in folds:
+                pf = f.get("profit_factor")
+                fold_rows.append({
+                    "Fold": f.get("fold"),
+                    "Window": f.get("window"),
+                    "Trades": f.get("trades", 0),
+                    "Win Rate": round(f.get("win_rate") or 0, 1),
+                    "Avg Return": round(f.get("avg_return") or 0, 2),
+                    "Profit Factor": (
+                        "∞" if pf == float("inf") else
+                        round(pf, 2) if pf is not None else 0
+                    ),
+                })
+            fold_df = pd.DataFrame(fold_rows)
+            gb = GridOptionsBuilder.from_dataframe(fold_df)
+            gb.configure_default_column(sortable=True, resizable=True, flex=1, unSortIcon=True, filter=False)
+            AgGrid(fold_df, gridOptions=gb.build(),
+                   height=60 + 35 * len(fold_df),
+                   allow_unsafe_jscode=True, use_json_serialization=True,
+                   theme="balham-dark", custom_css=GRID_CSS, key="bt_folds_table")
     else:
         summary = summarize_results(results, forward_days=(1, 5, 20))
         st.markdown(

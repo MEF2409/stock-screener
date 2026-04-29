@@ -227,6 +227,38 @@ def backtest_with_playbook(setup: str, tickers: list[str], start_date: str, end_
     return pd.DataFrame(rows)
 
 
+def walk_forward_backtest(setup: str, tickers: list[str], start_date: str, end_date: str,
+                          n_folds: int = 4, max_hold_days: int = 30,
+                          progress_callback: Callable | None = None) -> list[dict]:
+    """Split [start_date, end_date] into N equal time folds and run the
+    playbook backtest on each. Returns per-fold summary stats so the
+    trader can see how much edge varies across regimes.
+
+    A profit factor that holds steady across folds = robust rules.
+    Wildly different per-fold stats = the rules fit one regime, not real edge.
+    """
+    s = pd.to_datetime(start_date)
+    e = pd.to_datetime(end_date)
+    if e <= s or n_folds < 1:
+        return []
+    fold_len = (e - s) / n_folds
+    folds = []
+    for i in range(n_folds):
+        f_start = (s + i * fold_len).strftime("%Y-%m-%d")
+        f_end = (s + (i + 1) * fold_len).strftime("%Y-%m-%d")
+        df = backtest_with_playbook(
+            setup=setup, tickers=tickers,
+            start_date=f_start, end_date=f_end,
+            max_hold_days=max_hold_days,
+            progress_callback=progress_callback,
+        )
+        s_dict = summarize_playbook(df)
+        s_dict["fold"] = i + 1
+        s_dict["window"] = f"{f_start} → {f_end}"
+        folds.append(s_dict)
+    return folds
+
+
 def summarize_playbook(results: pd.DataFrame) -> dict:
     """Aggregate stats from a playbook backtest: trades, win rate, profit
     factor, avg return, avg hold, expectancy."""
