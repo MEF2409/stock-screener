@@ -143,7 +143,11 @@ def backtest_with_playbook(setup: str, tickers: list[str], start_date: str, end_
             except Exception: pass
         try:
             df = get_ohlcv(ticker)
-            if df.empty:
+            # Need ~1y of history so MA50/100/200 + 52w extrema in the exit
+            # playbook produce real values. Without this, backtests on
+            # short-history tickers silently exit only on stop/target/time
+            # rules and undercount MA-based stop-outs.
+            if df.empty or len(df) < 250:
                 continue
             df = df.sort_values("Date").reset_index(drop=True)
             mask = (df["Date"] >= start_date) & (df["Date"] <= end_date)
@@ -154,26 +158,41 @@ def backtest_with_playbook(setup: str, tickers: list[str], start_date: str, end_
                 idx_list = df.index[df["Date"] == d].tolist()
                 if not idx_list:
                     continue
-                entry_idx = idx_list[0]
-                entry_price = float(df.iloc[entry_idx]["Close"])
+                signal_idx = idx_list[0]
+                # Realistic fill: the scanner needs day D's full bar to
+                # flag (Open + Volume + MAs computed on D's close). A live
+                # trader can't get that and act on D's close — they get the
+                # signal at EOD and enter at D+1's open.
+                entry_idx = signal_idx + 1
+                if entry_idx >= len(df):
+                    continue
+                entry_price = float(df.iloc[entry_idx]["Open"])
                 trade = {
                     "ticker": ticker, "side": side, "setup": setup.lower(),
-                    "entry_date": d, "entry_price": entry_price, "shares": 1,
+                    "entry_date": df.iloc[entry_idx]["Date"],
+                    "entry_price": entry_price, "shares": 1,
                 }
 
                 exit_idx = None
                 exit_reason = "max_hold"
-                running_extreme = entry_price  # for drawdown tracking
+                # Track max-adverse-excursion using High/Low (intraday extreme),
+                # not Close — Close-only undercounts drawdown and misses
+                # whether stops were hit intraday.
+                if side == "long":
+                    running_extreme = float(df.iloc[entry_idx]["Low"])
+                else:
+                    running_extreme = float(df.iloc[entry_idx]["High"])
+
                 for offset in range(1, max_hold_days + 1):
                     j = entry_idx + offset
                     if j >= len(df):
                         break
-                    snapshot = df.iloc[: j + 1].copy()
-                    px = float(df.iloc[j]["Close"])
+                    bar = df.iloc[j]
                     if side == "long":
-                        running_extreme = min(running_extreme, px)
+                        running_extreme = min(running_extreme, float(bar["Low"]))
                     else:
-                        running_extreme = max(running_extreme, px)
+                        running_extreme = max(running_extreme, float(bar["High"]))
+                    snapshot = df.iloc[: j + 1].copy()
                     verdict = evaluate_exit(trade, snapshot)
                     if verdict.action == "exit":
                         exit_idx = j
@@ -196,7 +215,7 @@ def backtest_with_playbook(setup: str, tickers: list[str], start_date: str, end_
 
                 rows.append({
                     "ticker": ticker, "setup": setup.lower(), "side": side,
-                    "entry_date": d, "entry_price": entry_price,
+                    "entry_date": trade["entry_date"], "entry_price": entry_price,
                     "exit_date": exit_date, "exit_price": exit_price,
                     "exit_reason": exit_reason[:80],
                     "hold_days": hold_days,

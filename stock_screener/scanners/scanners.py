@@ -69,7 +69,9 @@ def scan_runaway_gap(ticker: str) -> dict:
             "reason": "Runaway Gap" if flagged else "No gap or normal volume",
             "date": today["Date"],
             "open": today["Open"],
-            "close": today["Close"],
+            # Prior close (gap reference). Same convention as Fade so alerts
+            # can compute (open - close) / close and get the actual gap %.
+            "close": yesterday["Close"],
             "volume": today["Volume"],
             "avg_volume_30d": today["Avg_Volume_30d"],
             "catalyst": _catalyst_for(ticker),

@@ -36,7 +36,12 @@ def _fetch_finnhub_earnings_window(start: str, end: str) -> list[dict]:
 
 
 def _split_past_future(rows: list[dict], today: str) -> tuple[dict[str, str], dict[str, str]]:
-    """Partition Finnhub rows into (most-recent-past per ticker, soonest-future per ticker)."""
+    """Partition Finnhub rows into (most-recent-past per ticker, soonest-future per ticker).
+
+    A report dated TODAY is treated as past — it's a BMO print whose price
+    reaction is already in today's open. Otherwise the catalyst lookup
+    misses the very case the morning workflow was built for.
+    """
     past: dict[str, str] = {}
     future: dict[str, str] = {}
     for row in rows:
@@ -44,12 +49,10 @@ def _split_past_future(rows: list[dict], today: str) -> tuple[dict[str, str], di
         date = row.get("date")
         if not sym or not date:
             continue
-        if date < today:
-            # Keep the LATEST past date (most recent print)
+        if date <= today:
             if sym not in past or date > past[sym]:
                 past[sym] = date
         else:
-            # Keep the EARLIEST future date (soonest upcoming)
             if sym not in future or date < future[sym]:
                 future[sym] = date
     return past, future
@@ -82,8 +85,8 @@ def update_earnings_calendar(tickers: list, lookahead_days: int = 60,
     today = datetime.now().date()
     today_iso = today.isoformat()
     past_start = (today - timedelta(days=lookback_days)).isoformat()
-    past_end = (today - timedelta(days=1)).isoformat()
-    future_start = today_iso
+    past_end = today_iso  # include today so BMO prints land in past
+    future_start = (today + timedelta(days=1)).isoformat()
     future_end = (today + timedelta(days=lookahead_days)).isoformat()
 
     past_dates: dict[str, str] = {}
@@ -184,7 +187,10 @@ def has_earnings_within_days(ticker: str, days: int = 14) -> bool:
     today = datetime.now().date()
     days_until_earnings = (earnings_date - today).days
 
-    return 0 <= days_until_earnings <= days
+    # Strictly future-only: today's BMO print is in the past now (its price
+    # reaction is already in today's open). Filter is meant to skip names
+    # that haven't reported yet but will soon.
+    return 0 < days_until_earnings <= days
 
 
 def get_earnings_dates(tickers: list = None) -> pd.DataFrame:

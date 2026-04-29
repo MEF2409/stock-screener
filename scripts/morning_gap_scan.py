@@ -100,13 +100,15 @@ def main():
     earnings_count = sum(1 for g in gappers if g["catalyst"] == "earnings")
     print(f"   ✓ {len(gappers)} gappers ({len(ups)} up, {len(downs)} down, {earnings_count} on earnings)")
 
-    # Reuse the alerts formatter — slot the gappers into a virtual scanner so the
-    # existing notifier prints them with the per-ticker context (gap % + catalyst).
+    # Notifier has dedicated lanes per setup. Gap-ups go to the Momentum lane
+    # only when notable (≥3% or earnings); gap-downs go to a dedicated Gap
+    # Down lane (NOT Fade, which is a short setup).
     alert_payload = {
         "runaway_gap": [g for g in ups if g["catalyst"] == "earnings" or abs(g["gap_pct"]) >= 3.0],
         "bullish_div": [],
         "bearish_div": [],
-        "gap_up_normal_vol": [g for g in downs[:30]],  # gap-DOWNs go in the "fade" lane to surface them
+        "gap_up_normal_vol": [],
+        "gap_down": downs[:30],
     }
 
     print(f"\n3. Sending alert...")

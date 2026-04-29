@@ -91,10 +91,16 @@ def _evaluate_fade(trade: dict, df: pd.DataFrame, v: ExitVerdict) -> None:
     pnl = _pnl_pct("short", entry, mark)
     days = _days_in_trade(trade["entry_date"], as_of=str(latest.get("Date")))
 
-    # Estimated cover targets / stops
+    # Estimated cover targets / stops. ATR fallback (entry × 1.02) gives a
+    # $0.10 stop on a $5 stock — instantly hit by 9:30 noise. Floor the stop
+    # distance at $0.25 so cheap stocks get sane room.
     atr = _atr(df)
-    stop_above = entry * 1.02 if atr is None else entry + 1.5 * atr
-    target_below = entry * 0.95 if atr is None else entry - 2.0 * atr
+    if atr is None:
+        stop_above = entry + max(entry * 0.02, 0.25)
+        target_below = entry - max(entry * 0.05, 0.50)
+    else:
+        stop_above = entry + 1.5 * atr
+        target_below = entry - 2.0 * atr
     v.key_levels["entry"] = entry
     v.key_levels["stop"] = stop_above
     v.key_levels["target"] = target_below
@@ -135,7 +141,10 @@ def _evaluate_momentum(trade: dict, df: pd.DataFrame, v: ExitVerdict) -> None:
     days = _days_in_trade(trade["entry_date"], as_of=str(latest.get("Date")))
 
     atr = _atr(df)
-    stop_below = entry * 0.96 if atr is None else entry - 1.5 * atr
+    if atr is None:
+        stop_below = entry - max(entry * 0.04, 0.25)
+    else:
+        stop_below = entry - 1.5 * atr
     v.key_levels["entry"] = entry
     v.key_levels["stop"] = stop_below
 
@@ -179,7 +188,10 @@ def _evaluate_reversal(trade: dict, df: pd.DataFrame, v: ExitVerdict) -> None:
     pnl = _pnl_pct("long", entry, mark)
 
     atr = _atr(df)
-    stop_below = entry * 0.94 if atr is None else entry - 2.0 * atr
+    if atr is None:
+        stop_below = entry - max(entry * 0.06, 0.25)
+    else:
+        stop_below = entry - 2.0 * atr
     v.key_levels["entry"] = entry
     v.key_levels["stop"] = stop_below
 
@@ -187,8 +199,10 @@ def _evaluate_reversal(trade: dict, df: pd.DataFrame, v: ExitVerdict) -> None:
     if mark < stop_below:
         v.add("exit", "high", f"Stop ${stop_below:.2f} hit — reversal failed, get out")
 
-    # Failed reversal: new low after entry kills the thesis
-    low_52w = df["Low"].tail(252).min() if len(df) >= 5 else None
+    # Failed reversal: new low after entry kills the thesis. Need ~1y of
+    # data to call something a real 52w low — anything less is just a
+    # "low of the available history."
+    low_52w = df["Low"].tail(252).min() if len(df) >= 252 else None
     if low_52w is not None and float(latest["Low"]) <= float(low_52w):
         v.add("exit", "high", f"New 52w low (${float(low_52w):.2f}) post-entry — divergence broke")
 
@@ -216,15 +230,19 @@ def _evaluate_caution(trade: dict, df: pd.DataFrame, v: ExitVerdict) -> None:
     pnl = _pnl_pct("short", entry, mark)
 
     atr = _atr(df)
-    stop_above = entry * 1.05 if atr is None else entry + 2.0 * atr
+    if atr is None:
+        stop_above = entry + max(entry * 0.05, 0.25)
+    else:
+        stop_above = entry + 2.0 * atr
     v.key_levels["entry"] = entry
     v.key_levels["stop"] = stop_above
 
     if mark >= stop_above:
         v.add("exit", "high", f"Stop ${stop_above:.2f} hit — divergence failed")
 
-    # New 52w high after entry = thesis dead
-    high_52w = df["High"].tail(252).max() if len(df) >= 5 else None
+    # New 52w high after entry = thesis dead. Same rationale as the Bullish
+    # Divergence playbook — require ~1y of bars before claiming "52w high".
+    high_52w = df["High"].tail(252).max() if len(df) >= 252 else None
     if high_52w is not None and float(latest["High"]) >= float(high_52w):
         v.add("exit", "high", f"New 52w high (${float(high_52w):.2f}) — top is in… later, not now")
 

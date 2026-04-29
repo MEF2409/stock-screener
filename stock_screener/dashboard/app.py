@@ -1356,7 +1356,10 @@ def all_signals_table(scans: dict, filter_text: str = "", watchlist_tickers: set
                 "Ticker": t,
                 "Scanner": scanner,
                 "Catalyst": (r.get("catalyst") or "none").lower(),
-                "Close": r.get("close"),
+                # `close` for gap-based scanners is the prior session's close.
+                # For Reversal/Caution it isn't populated (None). Either way
+                # "Prior Close" is the honest header.
+                "Prior Close": r.get("close"),
                 "RSI": r.get("rsi"),
                 "From High": r.get("_pct_from_high"),
                 "From Low": r.get("_pct_from_low"),
@@ -1425,7 +1428,8 @@ def all_signals_table(scans: dict, filter_text: str = "", watchlist_tickers: set
                         headerTooltip="Which scanner flagged this ticker.")
     gb.configure_column("Catalyst", valueFormatter=catalyst_fmt, cellStyle=catalyst_style, width=120,
                         headerTooltip="⚡ EARNINGS = company reported within the last 2 sessions, so the gap is the post-print reaction. Otherwise the gap has no immediate news catalyst.")
-    gb.configure_column("Close", type=["numericColumn"], valueFormatter=currency_fmt, cellStyle=numeric)
+    gb.configure_column("Prior Close", type=["numericColumn"], valueFormatter=currency_fmt, cellStyle=numeric,
+                        headerTooltip="Yesterday's closing price (gap reference).")
     gb.configure_column("RSI", type=["numericColumn"], valueFormatter=rsi_fmt, cellStyle=numeric)
     gb.configure_column("From High", type=["numericColumn"], valueFormatter=pct_fmt, cellStyle=pct_style, width=110)
     gb.configure_column("From Low", type=["numericColumn"], valueFormatter=pct_fmt, cellStyle=pct_style, width=110)
@@ -1685,7 +1689,10 @@ def scanner_results_table(scanner_name: str, results: list, filter_text: str = "
         row = {"Ticker": ticker, "Catalyst": (result.get("catalyst") or "none").lower()}
         if "open" in result:
             row["Open"] = result.get("open")
-            row["Close"] = result.get("close")
+            # `close` from gap scanners is the PRIOR session's close (the
+            # gap reference), not today's close. Label accordingly so the
+            # trader can read "today opened at X, gapped from Y."
+            row["Prior Close"] = result.get("close")
             row["Volume"] = result.get("volume")
         if "low" in result:
             row["52W Low"] = result.get("low")
@@ -1796,13 +1803,13 @@ def scanner_results_table(scanner_name: str, results: list, filter_text: str = "
         )
     col_tooltips = {
         "Open": "Today's opening price",
-        "Close": "Today's closing price",
+        "Prior Close": "Yesterday's closing price (gap reference). Open vs Prior Close = the gap.",
         "Volume": "Today's trading volume (shares)",
         "52W Low": "Lowest low over the past 52 weeks",
         "52W High": "Highest high over the past 52 weeks",
         "RSI": "Relative Strength Index (14-day). <30 oversold · 30–50 weak · 50–70 strong · >70 overbought",
     }
-    for col in ("Open", "Close", "52W Low", "52W High"):
+    for col in ("Open", "Prior Close", "52W Low", "52W High"):
         if col in df.columns:
             gb.configure_column(
                 col, type=["numericColumn"], valueFormatter=currency_fmt,

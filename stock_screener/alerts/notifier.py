@@ -22,6 +22,7 @@ _SETUP_META = (
     ("bullish_div", "🔄 Reversal", "long"),
     ("bearish_div", "⚠️ Caution", "short"),
     ("gap_up_normal_vol", "📉 Fade", "short"),
+    ("gap_down", "🟢 Gap Down", "long"),
 )
 
 
@@ -37,7 +38,7 @@ def _gap_pct(flag: dict) -> float | None:
 def _format_signal_line(scanner_key: str, side: str, flag: dict) -> str:
     """One human-readable line per ticker with the most actionable fact."""
     parts = [f"*{flag['ticker']}*"]
-    gap = _gap_pct(flag) if scanner_key in ("runaway_gap", "gap_up_normal_vol") else None
+    gap = _gap_pct(flag) if scanner_key in ("runaway_gap", "gap_up_normal_vol", "gap_down") else None
     if gap is not None:
         sign = "+" if gap >= 0 else ""
         parts.append(f"gap {sign}{gap:.1f}%")
@@ -84,7 +85,7 @@ def _format_text(results: dict) -> str:
         flags = sorted(flags, key=lambda f: 0 if (f.get("catalyst") or "").lower() == "earnings" else 1)
         for f in flags[:20]:
             tag = " [EARNINGS]" if (f.get("catalyst") or "").lower() == "earnings" else ""
-            gap = _gap_pct(f) if scanner in ("runaway_gap", "gap_up_normal_vol") else None
+            gap = _gap_pct(f) if scanner in ("runaway_gap", "gap_up_normal_vol", "gap_down") else None
             gap_s = f" gap {('+' if gap >= 0 else '')}{gap:.1f}%" if gap is not None else ""
             lines.append(f"    - {f['ticker']}{gap_s}{tag}")
         if len(flags) > 20:
