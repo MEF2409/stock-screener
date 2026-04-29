@@ -68,6 +68,7 @@ GRID_CSS = {
     ".ag-header-cell-label": {
         "color": f"{MUTED} !important", "letter-spacing": "0.05em",
         "text-transform": "uppercase", "font-size": "0.72rem", "font-weight": "600",
+        "justify-content": "center",
     },
     ".ag-sort-indicator-container": {"opacity": "0.85 !important", "color": f"{ACCENT} !important"},
     ".ag-sort-none-icon, .ag-sort-ascending-icon, .ag-sort-descending-icon": {"color": f"{ACCENT} !important"},
@@ -81,7 +82,10 @@ GRID_CSS = {
         "background-color": "rgba(0,217,255,0.1) !important",
         "border-left": f"3px solid {ACCENT} !important",
     },
-    ".ag-cell": {"display": "flex", "align-items": "center", "border-right": "none !important"},
+    ".ag-cell": {
+        "display": "flex", "align-items": "center", "justify-content": "center",
+        "border-right": "none !important", "text-align": "center !important",
+    },
     # Pinned ticker column gets subtle separation
     ".ag-pinned-left-cols-container .ag-cell": {"background-color": f"{SURFACE} !important"},
     ".ag-pinned-left-cols-container .ag-row-hover .ag-cell": {"background-color": "#1c232c !important"},
