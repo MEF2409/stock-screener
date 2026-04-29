@@ -2021,6 +2021,15 @@ def all_signals_table(scans: dict, filter_text: str = "", watchlist_tickers: set
                         headerTooltip="⚠️ = this ticker was flagged by BOTH a long-side and short-side scanner today. The setups disagree.")
     gb.configure_column("Catalyst", valueFormatter=catalyst_fmt, cellStyle=catalyst_style, width=120,
                         headerTooltip="⚡ EARNINGS = company reported within the last 2 sessions, so the gap is the post-print reaction. Otherwise the gap has no immediate news catalyst.")
+    # Tint earnings-catalyst rows gold so they pop without having to scan
+    # the catalyst column.
+    earnings_row_style = JsCode(
+        "function(p){if(p.data && (p.data.Catalyst||'').toLowerCase()==='earnings')"
+        "return {background:'rgba(217,153,34,0.10)',"
+        "borderLeft:'2px solid rgba(217,153,34,0.45)'};"
+        "return null;}"
+    )
+    gb.configure_grid_options(getRowStyle=earnings_row_style)
     gb.configure_column("Prior Close", type=["numericColumn"], valueFormatter=currency_fmt, cellStyle=numeric,
                         headerTooltip="Yesterday's closing price (gap reference).")
     advol_fmt = JsCode(
@@ -2482,6 +2491,14 @@ def scanner_results_table(scanner_name: str, results: list, filter_text: str = "
             "Catalyst", valueFormatter=catalyst_fmt, cellStyle=catalyst_style, width=120,
             headerTooltip="⚡ EARNINGS = company reported within the last 2 sessions, so the gap is the post-print reaction. Otherwise the gap has no immediate news catalyst.",
         )
+        # Tint earnings-catalyst rows gold across all per-scanner tables.
+        earnings_row_style = JsCode(
+            "function(p){if(p.data && (p.data.Catalyst||'').toLowerCase()==='earnings')"
+            "return {background:'rgba(217,153,34,0.10)',"
+            "borderLeft:'2px solid rgba(217,153,34,0.45)'};"
+            "return null;}"
+        )
+        gb.configure_grid_options(getRowStyle=earnings_row_style)
     col_tooltips = {
         "Open": "Today's opening price",
         "Prior Close": "Yesterday's closing price (gap reference). Open vs Prior Close = the gap.",
