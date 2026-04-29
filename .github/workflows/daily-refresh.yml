@@ -33,6 +33,12 @@ jobs:
         run: |
           curl -L https://fly.io/install.sh | sh
           export PATH="$HOME/.fly/bin:$PATH"
+          # Wake the machine if it auto-stopped, then wait for SSH to come up
+          MACHINE_ID=$(flyctl machine list --app "$FLY_APP_NAME" --json | jq -r '.[0].id')
+          echo "Starting machine $MACHINE_ID..."
+          flyctl machine start "$MACHINE_ID" --app "$FLY_APP_NAME" || true
+          echo "Waiting 15s for machine to boot..."
+          sleep 15
           flyctl ssh console --app "$FLY_APP_NAME" --command "python /app/scripts/daily_refresh.py"
 
       - name: Upload logs as artifact
