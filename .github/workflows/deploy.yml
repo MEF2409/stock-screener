@@ -22,6 +22,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: superfly/flyctl-actions/setup-flyctl@master
-      - run: flyctl deploy --remote-only --app "${{ secrets.FLY_APP_NAME }}"
+      # Build on the GitHub runner (reliable PyPI) and push to Fly's registry.
+      # --remote-only would defer the build to Fly/Depot's builder, which has
+      # been hitting Connection-reset errors fetching from PyPI.
+      - run: flyctl deploy --local-only --app "${{ secrets.FLY_APP_NAME }}"
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
