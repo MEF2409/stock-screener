@@ -116,6 +116,12 @@ def init_db() -> None:
             approved_at TEXT
         )
     """)
+    # Additive: JSON blob for user preferences (account size, risk %, alert
+    # opt-ins, etc). Storing as JSON text keeps the schema flexible.
+    cursor.execute("PRAGMA table_info(users)")
+    user_cols = {row[1] for row in cursor.fetchall()}
+    if "prefs" not in user_cols:
+        cursor.execute("ALTER TABLE users ADD COLUMN prefs TEXT NOT NULL DEFAULT '{}'")
 
     # Trades — manual journal of executed positions for tracking + grading.
     cursor.execute("""

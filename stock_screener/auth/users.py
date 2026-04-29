@@ -71,6 +71,44 @@ def set_status(username: str, status: str) -> None:
     conn.close()
 
 
+def get_prefs(username: str) -> dict:
+    """Return the user's prefs JSON blob (account size, risk %, etc.) as a dict."""
+    if not username:
+        return {}
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT prefs FROM users WHERE username = ?", (username,))
+    row = cur.fetchone()
+    conn.close()
+    if not row or not row[0]:
+        return {}
+    try:
+        import json
+        return json.loads(row[0])
+    except Exception:
+        return {}
+
+
+def set_prefs(username: str, prefs: dict) -> None:
+    """Overwrite the user's prefs JSON blob."""
+    if not username:
+        return
+    import json
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("UPDATE users SET prefs = ? WHERE username = ?",
+                (json.dumps(prefs), username))
+    conn.commit()
+    conn.close()
+
+
+def update_pref(username: str, key: str, value) -> None:
+    """Patch a single key in the user's prefs."""
+    p = get_prefs(username)
+    p[key] = value
+    set_prefs(username, p)
+
+
 def delete_user(username: str) -> None:
     conn = get_connection()
     cur = conn.cursor()

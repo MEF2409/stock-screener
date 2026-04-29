@@ -40,6 +40,7 @@ from stock_screener.backtest.backtest import (
 from stock_screener.auth.users import (
     signup as user_signup, list_users, set_status, delete_user,
     is_admin, get_approved_credentials, seed_from_yaml,
+    get_prefs, update_pref,
 )
 from stock_screener.trades.trades import (
     add_trade, close_trade, delete_trade as remove_trade,
@@ -1066,10 +1067,17 @@ def render_trades_tab(owner: str):
     )
 
     # ---- Position sizing helper ----
+    # Load persisted prefs into session_state on first render.
+    prefs = get_prefs(owner) or {}
+    if "acct_size" not in st.session_state and prefs.get("acct_size"):
+        st.session_state["acct_size"] = float(prefs["acct_size"])
+    if "risk_pct" not in st.session_state and prefs.get("risk_pct"):
+        st.session_state["risk_pct"] = float(prefs["risk_pct"])
+
     with st.expander("📐 Sizing calculator", expanded=False):
         st.caption(
             "Risk-based sizing: how many shares to buy/short so a stop-out costs "
-            "no more than X% of the account."
+            "no more than X% of the account. Account size and risk % persist across sessions."
         )
         s1, s2, s3 = st.columns(3)
         with s1:
@@ -1085,6 +1093,14 @@ def render_trades_tab(owner: str):
             )
         with s3:
             sz_side = st.selectbox("Side", ["long", "short"], key="sz_side")
+        # Persist any changes back to user prefs.
+        if (prefs.get("acct_size") != account_size
+                or prefs.get("risk_pct") != risk_pct):
+            try:
+                update_pref(owner, "acct_size", account_size)
+                update_pref(owner, "risk_pct", risk_pct)
+            except Exception:
+                pass
         e1, e2 = st.columns(2)
         with e1:
             sz_entry = st.number_input(
