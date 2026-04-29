@@ -832,6 +832,86 @@ def _fetch_recent_news(ticker: str, limit: int = 4) -> list[dict]:
     return out
 
 
+def _render_behavioral_warnings(open_df: pd.DataFrame, closed_df: pd.DataFrame,
+                                account_size: float,
+                                max_daily_loss_pct: float = 3.0,
+                                streak_threshold: int = 3) -> None:
+    """Daily P&L cap + loss-streak cooldown.
+
+    The signals can be perfect and the trader still blows up by ignoring
+    these two: revenge-trading after big losses, and pressing size into
+    a cold streak. Surface both as banners so they're hard to miss.
+    """
+    today_iso = datetime.now().date().isoformat()
+
+    # Today's realized: sum P&L over trades exited today
+    realized_today = 0.0
+    if closed_df is not None and not closed_df.empty:
+        for _, t in closed_df.iterrows():
+            if str(t.get("exit_date") or "").startswith(today_iso):
+                p = compute_pnl(t.to_dict())
+                realized_today += float(p.get("pnl") or 0)
+
+    # Today's unrealized: mark-to-market across open trades
+    unrealized = 0.0
+    if open_df is not None and not open_df.empty:
+        for _, t in open_df.iterrows():
+            try:
+                df = get_ohlcv(t["ticker"])
+                mark = float(df.iloc[-1]["Close"]) if df is not None and not df.empty else None
+                p = compute_pnl(t.to_dict(), current_price=mark)
+                unrealized += float(p.get("pnl") or 0)
+            except Exception:
+                continue
+
+    day_total = realized_today + unrealized
+    day_pct = (day_total / account_size * 100) if account_size else 0
+    cap_dollars = -account_size * (max_daily_loss_pct / 100.0)
+
+    warnings = []
+    if day_total <= cap_dollars and account_size > 0:
+        warnings.append((
+            "bear",
+            f"🛑 <strong>Daily loss cap hit</strong>: today's P&L is "
+            f"${day_total:,.2f} ({day_pct:+.2f}% of account), past your "
+            f"{max_daily_loss_pct:.1f}% limit. Stop entering new trades — "
+            f"close positions to manage risk only. Revenge trades from here "
+            f"compound into account-killing days."
+        ))
+
+    # Loss streak from most recent closed trades
+    if closed_df is not None and not closed_df.empty:
+        recent = closed_df.sort_values("exit_date", ascending=False).head(streak_threshold)
+        if len(recent) >= streak_threshold:
+            losses = 0
+            for _, t in recent.iterrows():
+                p = compute_pnl(t.to_dict())
+                if float(p.get("pnl") or 0) < 0:
+                    losses += 1
+                else:
+                    break
+            if losses >= streak_threshold:
+                warnings.append((
+                    "warn",
+                    f"⚠️ <strong>{losses}-trade losing streak</strong>: your last "
+                    f"{losses} closed trades all lost money. The market regime "
+                    f"may have shifted, or you're forcing trades. Halve size on "
+                    f"the next entry, or skip until you see an A+ setup."
+                ))
+
+    for kind, msg in warnings:
+        if kind == "bear":
+            bg = "rgba(248,81,73,0.12)"; border = BEAR
+        else:
+            bg = "rgba(217,153,34,0.10)"; border = WARN
+        st.markdown(
+            f"<div style='background:{bg};border-left:3px solid {border};"
+            f"padding:10px 14px;border-radius:6px;margin:4px 0 12px 0;font-size:0.85rem;color:{TEXT};'>"
+            f"{msg}</div>",
+            unsafe_allow_html=True,
+        )
+
+
 def _render_portfolio_risk(open_df: pd.DataFrame, account_size: float) -> None:
     """Aggregate risk across open trades. Per-trade sizing is handled in
     the calculator; this is the portfolio view that catches over-concentration:
@@ -1094,12 +1174,21 @@ def render_trades_tab(owner: str):
             )
         with s3:
             sz_side = st.selectbox("Side", ["long", "short"], key="sz_side")
+        max_daily_loss_pct = st.number_input(
+            "Daily loss cap (% of account)", min_value=0.5, max_value=20.0,
+            value=float(prefs.get("max_daily_loss_pct", 3.0)),
+            step=0.5, format="%.1f", key="max_daily_loss_pct",
+            help="If today's realized + unrealized P&L drops below this, "
+                 "the journal banners up a 'stop trading' warning. Default 3%.",
+        )
         # Persist any changes back to user prefs.
         if (prefs.get("acct_size") != account_size
-                or prefs.get("risk_pct") != risk_pct):
+                or prefs.get("risk_pct") != risk_pct
+                or prefs.get("max_daily_loss_pct") != max_daily_loss_pct):
             try:
                 update_pref(owner, "acct_size", account_size)
                 update_pref(owner, "risk_pct", risk_pct)
+                update_pref(owner, "max_daily_loss_pct", max_daily_loss_pct)
             except Exception:
                 pass
         e1, e2 = st.columns(2)
@@ -1191,6 +1280,13 @@ def render_trades_tab(owner: str):
     # ---- Open positions ----
     open_df = list_trades(owner, status="open")
     closed_df = list_trades(owner, status="closed")
+
+    # ---- Behavioral guardrails: daily loss cap + loss-streak cooldown ----
+    _render_behavioral_warnings(
+        open_df, closed_df,
+        account_size=float(st.session_state.get("acct_size", 10000.0)),
+        max_daily_loss_pct=float(prefs.get("max_daily_loss_pct", 3.0)),
+    )
 
     # ---- Portfolio risk dashboard ----
     if not open_df.empty:
