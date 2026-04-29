@@ -789,6 +789,47 @@ def render_signal_density(days: int = 90):
     st.plotly_chart(style_plotly(fig, title=f"Signal Density · last {days} days"), width='stretch')
 
 
+@st.cache_data(ttl=1800, show_spinner=False)
+def _fetch_recent_news(ticker: str, limit: int = 4) -> list[dict]:
+    """Recent news headlines for a ticker via yfinance. Cached 30 min so
+    flipping between tickers doesn't hammer Yahoo on every render."""
+    import yfinance as yf
+    try:
+        items = yf.Ticker(ticker).news or []
+    except Exception:
+        return []
+    out = []
+    now = datetime.now().timestamp()
+    for it in items[:limit]:
+        # yfinance has shifted the news shape over time — handle both flat and
+        # nested ('content') dicts so this keeps working across versions.
+        c = it.get("content") if isinstance(it.get("content"), dict) else it
+        title = c.get("title") or it.get("title") or ""
+        pub = (c.get("provider", {}) or {}).get("displayName") if isinstance(c.get("provider"), dict) else None
+        pub = pub or it.get("publisher") or ""
+        link = (c.get("canonicalUrl", {}) or {}).get("url") if isinstance(c.get("canonicalUrl"), dict) else None
+        link = link or c.get("clickThroughUrl", {}).get("url") if isinstance(c.get("clickThroughUrl"), dict) else None
+        link = link or it.get("link") or ""
+        ts = it.get("providerPublishTime") or 0
+        if not ts and isinstance(c.get("pubDate"), str):
+            try:
+                ts = pd.to_datetime(c["pubDate"]).timestamp()
+            except Exception:
+                ts = 0
+        age = ""
+        if ts:
+            mins = max(1, int((now - ts) / 60))
+            if mins < 60:
+                age = f"{mins}m ago"
+            elif mins < 1440:
+                age = f"{mins // 60}h ago"
+            else:
+                age = f"{mins // 1440}d ago"
+        if title:
+            out.append({"title": title, "publisher": pub, "link": link, "age": age})
+    return out
+
+
 def _render_portfolio_risk(open_df: pd.DataFrame, account_size: float) -> None:
     """Aggregate risk across open trades. Per-trade sizing is handled in
     the calculator; this is the portfolio view that catches over-concentration:
@@ -1893,6 +1934,40 @@ def detail_view(ticker: str, scans: dict = None):
             st.plotly_chart(create_rsi_chart(df.tail(120)), width='stretch')
         with c2:
             st.plotly_chart(create_volume_chart(df.tail(120)), width='stretch')
+
+        # Recent news headlines — confirms catalyst tag and gives the trader
+        # context ('is this earnings? FDA? buyout?') without leaving the page.
+        try:
+            headlines = _fetch_recent_news(ticker, limit=4)
+        except Exception:
+            headlines = []
+        if headlines:
+            st.markdown('<div class="mp-section-label">Recent News</div>',
+                        unsafe_allow_html=True)
+            news_html = "<div style='display:flex;flex-direction:column;gap:6px;margin-bottom:14px;'>"
+            for h in headlines:
+                pub = h.get("publisher") or ""
+                age = h.get("age") or ""
+                title = h.get("title") or ""
+                link = h.get("link") or ""
+                if link:
+                    title_html = (
+                        f"<a href='{link}' target='_blank' "
+                        f"style='color:{TEXT};text-decoration:none;font-weight:500;'>"
+                        f"{title}</a>"
+                    )
+                else:
+                    title_html = f"<span style='color:{TEXT};'>{title}</span>"
+                news_html += (
+                    f"<div style='padding:8px 12px;background:{SURFACE};"
+                    f"border-left:3px solid {ACCENT};border-radius:6px;font-size:0.85rem;'>"
+                    f"{title_html}"
+                    f"<div style='color:{MUTED};font-size:0.72rem;margin-top:3px;'>"
+                    f"{pub}{' · ' + age if pub and age else age}</div>"
+                    f"</div>"
+                )
+            news_html += "</div>"
+            st.markdown(news_html, unsafe_allow_html=True)
 
         # Recent OHLCV via AG Grid (consistent w/ scanner tables)
         st.markdown('<div class="mp-section-label">Recent Sessions</div>', unsafe_allow_html=True)
