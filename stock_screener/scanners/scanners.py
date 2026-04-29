@@ -21,6 +21,17 @@ def _catalyst_for(ticker: str) -> str:
     return "earnings" if had_earnings_within_past_days(ticker, days=2) else "none"
 
 
+def _avg_dollar_volume(price: float, avg_vol_30d: float) -> float | None:
+    """Average daily $-volume — proxy for liquidity. Below ~$5M is hard to
+    enter/exit cleanly, especially for shorts (HTB locate is also rough)."""
+    if price is None or avg_vol_30d is None:
+        return None
+    try:
+        return float(price) * float(avg_vol_30d)
+    except Exception:
+        return None
+
+
 def _apply_universal_filters(ticker: str, is_flagged: bool) -> bool:
     """
     Apply universal filters to a flagged stock.
@@ -74,6 +85,7 @@ def scan_runaway_gap(ticker: str) -> dict:
             "close": yesterday["Close"],
             "volume": today["Volume"],
             "avg_volume_30d": today["Avg_Volume_30d"],
+            "avg_dollar_vol": _avg_dollar_volume(today["Close"], today["Avg_Volume_30d"]),
             "catalyst": _catalyst_for(ticker),
         }
     except Exception as e:
@@ -135,6 +147,7 @@ def scan_bullish_divergence(ticker: str) -> dict:
             "rsi": today_rsi,
             "prev_low": prev_low_price,
             "prev_low_rsi": prev_low_rsi,
+            "avg_dollar_vol": _avg_dollar_volume(today["Close"], today["Avg_Volume_30d"]),
             "catalyst": _catalyst_for(ticker),
         }
     except Exception as e:
@@ -196,6 +209,7 @@ def scan_bearish_divergence(ticker: str) -> dict:
             "rsi": today_rsi,
             "prev_high": prev_high_price,
             "prev_high_rsi": prev_high_rsi,
+            "avg_dollar_vol": _avg_dollar_volume(today["Close"], today["Avg_Volume_30d"]),
             "catalyst": _catalyst_for(ticker),
         }
     except Exception as e:
@@ -250,6 +264,7 @@ def scan_gap_up_normal_volume(ticker: str) -> dict:
             "close": yesterday["Close"],
             "volume": today["Volume"],
             "avg_volume_30d": today["Avg_Volume_30d"],
+            "avg_dollar_vol": _avg_dollar_volume(today["Close"], today["Avg_Volume_30d"]),
             "ma_50": today["MA_50"],
             "ma_100": today["MA_100"],
             "ma_200": today["MA_200"],

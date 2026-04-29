@@ -1676,6 +1676,7 @@ def all_signals_table(scans: dict, filter_text: str = "", watchlist_tickers: set
             if filter_text and filter_text.upper() not in t.upper():
                 continue
             sl = r.get("_sparkline", [])
+            adv = r.get("avg_dollar_vol")
             combined.append({
                 "Ticker": t,
                 "Scanner": scanner,
@@ -1685,6 +1686,7 @@ def all_signals_table(scans: dict, filter_text: str = "", watchlist_tickers: set
                 # For Reversal/Caution it isn't populated (None). Either way
                 # "Prior Close" is the honest header.
                 "Prior Close": r.get("close"),
+                "Avg $Vol": adv,
                 "RSI": r.get("rsi"),
                 "From High": r.get("_pct_from_high"),
                 "From Low": r.get("_pct_from_low"),
@@ -1757,6 +1759,22 @@ def all_signals_table(scans: dict, filter_text: str = "", watchlist_tickers: set
                         headerTooltip="⚡ EARNINGS = company reported within the last 2 sessions, so the gap is the post-print reaction. Otherwise the gap has no immediate news catalyst.")
     gb.configure_column("Prior Close", type=["numericColumn"], valueFormatter=currency_fmt, cellStyle=numeric,
                         headerTooltip="Yesterday's closing price (gap reference).")
+    advol_fmt = JsCode(
+        "function(p){if(p.value==null)return '';"
+        "const v=Number(p.value);if(v>=1e9)return '$'+(v/1e9).toFixed(1)+'B';"
+        "if(v>=1e6)return '$'+(v/1e6).toFixed(1)+'M';"
+        "return '$'+(v/1e3).toFixed(0)+'K';}"
+    )
+    advol_style = JsCode(
+        "function(p){if(p.value==null)return null;const v=Number(p.value);"
+        "const base={fontFamily:'JetBrains Mono,monospace'};"
+        "if(v<5e6)return{...base,color:'#f85149',fontWeight:'700'};"
+        "if(v<25e6)return{...base,color:'#d29922'};"
+        "return{...base,color:'#8b949e'};}"
+    )
+    gb.configure_column("Avg $Vol", type=["numericColumn"], valueFormatter=advol_fmt,
+                        cellStyle=advol_style, width=110,
+                        headerTooltip="Avg daily $-volume (30d). RED <$5M = thin; AVOID for shorts (HTB locate is rough). YELLOW <$25M = mid-tier liquidity.")
     gb.configure_column("RSI", type=["numericColumn"], valueFormatter=rsi_fmt, cellStyle=numeric)
     gb.configure_column("From High", type=["numericColumn"], valueFormatter=pct_fmt, cellStyle=pct_style, width=110)
     gb.configure_column("From Low", type=["numericColumn"], valueFormatter=pct_fmt, cellStyle=pct_style, width=110)
