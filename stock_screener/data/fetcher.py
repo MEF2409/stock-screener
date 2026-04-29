@@ -20,11 +20,19 @@ def fetch_ohlcv(ticker: str, start_date: str, end_date: str) -> pd.DataFrame:
     Returns:
         DataFrame with columns: Open, High, Low, Close, Volume
     """
-    df = yf.download(ticker, start=start_date, end=end_date, progress=False)
-    # yfinance returns dates as index; reset to column for consistency
-    df.reset_index(inplace=True)
-    df.columns = ['Date', 'Open', 'High', 'Low', 'Close', 'Volume']
-    df['Date'] = df['Date'].dt.strftime('%Y-%m-%d')
+    df = yf.download(ticker, start=start_date, end=end_date, progress=False, auto_adjust=True)
+    if df.empty:
+        return df
+    # yfinance returns a MultiIndex on columns when given a single ticker
+    # (e.g. ('Open', 'ABT')). Flatten by dropping the ticker level so we can
+    # select by name. Positional rename is unsafe because yfinance's column
+    # order changed to alphabetical (Close, High, Low, Open, Volume), which
+    # silently swapped Open/Close in every fetch.
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = df.columns.get_level_values(0)
+    df = df.reset_index()
+    df = df[['Date', 'Open', 'High', 'Low', 'Close', 'Volume']]
+    df['Date'] = pd.to_datetime(df['Date']).dt.strftime('%Y-%m-%d')
     return df
 
 

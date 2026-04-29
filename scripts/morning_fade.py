@@ -35,9 +35,13 @@ from stock_screener.alerts.notifier import send_all
 
 def refresh_today_ohlcv(tickers: list[str]) -> int:
     """Fetch today's bar for each ticker and upsert. Returns success count."""
-    end = datetime.now().date()
-    start = (end - timedelta(days=5)).isoformat()  # need a few days of context
-    end = end.isoformat()
+    today = datetime.now().date()
+    start = (today - timedelta(days=5)).isoformat()
+    # yfinance treats `end` as exclusive — bump to tomorrow so today's in-progress
+    # bar is returned. Without this, the latest bar in the DB is yesterday's,
+    # and the Fade scanner ends up comparing yesterday's open vs. the prior day's
+    # close (a stale, 1-day-old gap check).
+    end = (today + timedelta(days=1)).isoformat()
     success = 0
     for i, ticker in enumerate(tickers):
         if (i + 1) % 25 == 0:
