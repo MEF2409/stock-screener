@@ -10,10 +10,33 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         sqlite3 \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python deps first to maximize cache reuse
+# Install Python deps first to maximize cache reuse.
+# Prefer IPv4 over IPv6 when resolving PyPI: Fly's and Depot's builders have an
+# unstable IPv6 path to Fastly's PyPI edge that RSTs mid-request, and pip never
+# falls back from a broken v6 socket to v4. This forces getaddrinfo to return
+# IPv4-mapped addresses first.
+RUN echo 'precedence ::ffff:0:0/96  100' >> /etc/gai.conf
+
+ENV PIP_DEFAULT_TIMEOUT=300 \
+    PIP_RETRIES=15 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_PREFER_BINARY=1
+
 COPY pyproject.toml requirements.txt ./
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+
+RUN pip install --no-cache-dir --upgrade pip
+
+# Heavy scientific stack first — these dominate download size; cache them aggressively
+RUN pip install --no-cache-dir numpy pandas
+
+# Streamlit + Plotly stack
+RUN pip install --no-cache-dir streamlit plotly streamlit-aggrid streamlit-authenticator
+
+# Data fetchers
+RUN pip install --no-cache-dir yfinance requests
+
+# Everything else from requirements (mostly satisfied at this point)
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy source
 COPY stock_screener/ ./stock_screener/
