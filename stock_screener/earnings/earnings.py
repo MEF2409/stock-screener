@@ -193,6 +193,139 @@ def has_earnings_within_days(ticker: str, days: int = 14) -> bool:
     return 0 < days_until_earnings <= days
 
 
+def _fetch_finnhub_past_earnings(ticker: str, limit: int = 8) -> list[str]:
+    """Per-ticker historical earnings dates via Finnhub /stock/earnings.
+    Returns up to `limit` past report dates (most recent first)."""
+    if not FINNHUB_KEY:
+        return []
+    try:
+        resp = requests.get(
+            f"{FINNHUB_BASE}/stock/earnings",
+            params={"symbol": ticker, "limit": limit, "token": FINNHUB_KEY},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        data = resp.json() or []
+    except Exception:
+        return []
+    dates = [row.get("period") for row in data if row.get("period")]
+    return [d for d in dates if d]
+
+
+def compute_earnings_reactions(ticker: str, get_ohlcv_fn) -> dict | None:
+    """Compute per-ticker reaction stats: avg gap %, same-day return %,
+    5-day return %, and fade-back rate over the last ~8 earnings events.
+
+    Definitions:
+    - gap_pct: (open after report - close before report) / close before
+    - same_day_pct: (close after report - close before report) / close before
+    - 5d_pct: (close 5 days after report - close before report) / close before
+    - fade_rate: among events where gap is in one direction, what % of the
+      time did same-day close move >50% back toward (or past) the prior close.
+    """
+    dates = _fetch_finnhub_past_earnings(ticker, limit=8)
+    if len(dates) < 3:
+        return None
+    df = get_ohlcv_fn(ticker)
+    if df is None or df.empty:
+        return None
+    df = df.sort_values("Date").reset_index(drop=True)
+
+    gaps = []
+    same_day = []
+    five_day = []
+    fades = 0
+    fade_eligible = 0
+    for d in dates:
+        # The Finnhub period date is the report fiscal date — we treat the
+        # following trading session as the "reaction" bar. Find the first
+        # bar with date >= d, then check d's prior close for the gap ref.
+        post_idx = df.index[df["Date"] >= d].tolist()
+        if not post_idx:
+            continue
+        post_idx = post_idx[0]
+        if post_idx == 0:
+            continue
+        prior_close = float(df.iloc[post_idx - 1]["Close"])
+        if prior_close <= 0:
+            continue
+        post_open = float(df.iloc[post_idx]["Open"])
+        post_close = float(df.iloc[post_idx]["Close"])
+        gap = (post_open - prior_close) / prior_close * 100
+        sd = (post_close - prior_close) / prior_close * 100
+        five_idx = post_idx + 4
+        fd = ((float(df.iloc[five_idx]["Close"]) - prior_close) / prior_close * 100
+              if five_idx < len(df) else None)
+        gaps.append(gap)
+        same_day.append(sd)
+        if fd is not None:
+            five_day.append(fd)
+        # Fade detection: gap moved one way, close moved >=50% back
+        if abs(gap) >= 1.0:
+            fade_eligible += 1
+            if (gap > 0 and sd < gap * 0.5) or (gap < 0 and sd > gap * 0.5):
+                fades += 1
+
+    if not gaps:
+        return None
+    return {
+        "ticker": ticker,
+        "n_events": len(gaps),
+        "avg_gap_pct": sum(gaps) / len(gaps),
+        "avg_same_day_pct": sum(same_day) / len(same_day),
+        "avg_5d_pct": (sum(five_day) / len(five_day)) if five_day else None,
+        "fade_rate": (fades / fade_eligible * 100) if fade_eligible else None,
+    }
+
+
+def update_earnings_reactions(tickers: list[str], get_ohlcv_fn) -> int:
+    """Compute and store reaction stats for a list of tickers. Returns count
+    successfully written. Slow (1 Finnhub req per ticker) — runs nightly."""
+    from stock_screener.data.db import get_connection
+    conn = get_connection()
+    cur = conn.cursor()
+    now = datetime.now().isoformat()
+    success = 0
+    for i, ticker in enumerate(tickers):
+        if (i + 1) % 100 == 0:
+            print(f"  reactions {i + 1}/{len(tickers)} success={success}")
+        stats = compute_earnings_reactions(ticker, get_ohlcv_fn)
+        if not stats:
+            continue
+        cur.execute(
+            """INSERT OR REPLACE INTO earnings_reactions
+               (ticker, n_events, avg_gap_pct, avg_same_day_pct, avg_5d_pct, fade_rate, last_updated)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (stats["ticker"], stats["n_events"], stats["avg_gap_pct"],
+             stats["avg_same_day_pct"], stats["avg_5d_pct"], stats["fade_rate"], now),
+        )
+        success += 1
+    conn.commit()
+    conn.close()
+    return success
+
+
+def get_earnings_reaction(ticker: str) -> dict | None:
+    """Look up cached reaction stats for a ticker."""
+    from stock_screener.data.db import get_connection
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT ticker, n_events, avg_gap_pct, avg_same_day_pct, avg_5d_pct, fade_rate "
+        "FROM earnings_reactions WHERE ticker = ?",
+        (ticker,),
+    )
+    row = cur.fetchone()
+    conn.close()
+    if not row:
+        return None
+    return {
+        "ticker": row[0], "n_events": row[1],
+        "avg_gap_pct": row[2], "avg_same_day_pct": row[3],
+        "avg_5d_pct": row[4], "fade_rate": row[5],
+    }
+
+
 def get_earnings_dates(tickers: list = None) -> pd.DataFrame:
     """
     Retrieve earnings dates for tickers from SQLite.

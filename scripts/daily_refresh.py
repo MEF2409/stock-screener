@@ -187,6 +187,29 @@ def main():
     except Exception as e:
         print(f"   ✗ Error: {e}")
 
+    # Step 6b: Update earnings-reaction stats — only for tickers that recently
+    # reported (so we incrementally backfill without hammering Finnhub on
+    # every ticker every night).
+    print("\n6b. Updating earnings-reaction stats for recent reporters...")
+    try:
+        from stock_screener.earnings.earnings import update_earnings_reactions
+        from stock_screener.data.db import get_connection
+        from stock_screener.data.fetcher import get_ohlcv
+        conn = get_connection()
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT ticker FROM earnings WHERE last_earnings_date >= date('now','-7 days')"
+        )
+        recent = [r[0] for r in cur.fetchall()]
+        conn.close()
+        if recent:
+            n = update_earnings_reactions(recent, get_ohlcv_fn=get_ohlcv)
+            print(f"   ✓ Reactions updated for {n}/{len(recent)} recent reporters")
+        else:
+            print("   - No recent reporters to refresh")
+    except Exception as e:
+        print(f"   ✗ Error: {e}")
+
     # Step 7: Fire alerts (Slack/Discord/email — only those configured)
     print("\n7. Sending alerts...")
     try:

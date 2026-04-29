@@ -1607,6 +1607,46 @@ def detail_view(ticker: str, scans: dict = None):
         stats_html += "</div>"
         st.markdown(stats_html, unsafe_allow_html=True)
 
+        # Earnings reaction history — answers "what does this stock typically
+        # do post-print?" Avg gap, avg same-day close, avg 5d, fade-back rate.
+        try:
+            from stock_screener.earnings.earnings import get_earnings_reaction
+            er = get_earnings_reaction(ticker)
+        except Exception:
+            er = None
+        if er and er.get("n_events"):
+            def _color_for(v: float | None) -> str:
+                if v is None: return "default"
+                return "bull" if v >= 0 else "bear"
+            def _fmt_pct(v: float | None) -> str:
+                return "—" if v is None else f"{v:+.2f}%"
+            fade_rate = er.get("fade_rate")
+            fade_text = f"{fade_rate:.0f}%" if fade_rate is not None else "—"
+            er_html = (
+                '<div class="mp-section-label" style="margin-top:18px;">'
+                f'Earnings Reaction History <span style="color:{MUTED};font-weight:400;'
+                f'font-size:0.8rem;text-transform:none;letter-spacing:0;">'
+                f'· last {er["n_events"]} events</span></div>'
+                '<div class="mp-stats-grid">'
+            )
+            er_html += detail_stat("Avg Gap", _fmt_pct(er.get("avg_gap_pct")),
+                                   color=_color_for(er.get("avg_gap_pct")))
+            er_html += detail_stat("Avg Same-Day Close", _fmt_pct(er.get("avg_same_day_pct")),
+                                   color=_color_for(er.get("avg_same_day_pct")))
+            er_html += detail_stat("Avg 5D Return", _fmt_pct(er.get("avg_5d_pct")),
+                                   color=_color_for(er.get("avg_5d_pct")))
+            er_html += detail_stat(
+                "Fade-Back Rate", fade_text,
+                color="bull" if (fade_rate or 0) >= 60 else
+                      ("bear" if (fade_rate or 0) <= 30 else "default"),
+            )
+            er_html += "</div>"
+            st.markdown(er_html, unsafe_allow_html=True)
+            st.caption(
+                "Fade-back rate = % of past earnings where the same-day close moved "
+                "≥50% back toward the prior close. >60% = consistent fader, <30% = trend-after-print."
+            )
+
         # Charts
         st.plotly_chart(create_price_chart(df.tail(120), signals=signals), width='stretch')
         c1, c2 = st.columns(2)

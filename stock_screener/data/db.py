@@ -76,6 +76,22 @@ def init_db() -> None:
     if "last_earnings_date" not in earnings_cols:
         cursor.execute("ALTER TABLE earnings ADD COLUMN last_earnings_date TEXT")
 
+    # Per-ticker historical earnings-reaction stats. Pre-computed nightly so
+    # the dashboard can show "this stock's last N earnings: avg gap ±X%,
+    # fade-back rate Y%" next to ⚡ EARNINGS signals without per-render API
+    # calls.
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS earnings_reactions (
+            ticker TEXT PRIMARY KEY,
+            n_events INTEGER NOT NULL,
+            avg_gap_pct REAL,
+            avg_same_day_pct REAL,
+            avg_5d_pct REAL,
+            fade_rate REAL,
+            last_updated TEXT NOT NULL
+        )
+    """)
+
     # Daily snapshot of all flagged signals (for historical density / trends)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS scan_history (
