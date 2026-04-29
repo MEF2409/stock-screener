@@ -113,6 +113,11 @@ def init_db() -> None:
     """)
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_trades_owner ON trades(owner)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_trades_ticker ON trades(ticker)")
+    # Additive migration: setup tag drives which exit playbook applies.
+    cursor.execute("PRAGMA table_info(trades)")
+    trade_cols = {row[1] for row in cursor.fetchall()}
+    if "setup" not in trade_cols:
+        cursor.execute("ALTER TABLE trades ADD COLUMN setup TEXT NOT NULL DEFAULT 'manual'")
 
     conn.commit()
     conn.close()

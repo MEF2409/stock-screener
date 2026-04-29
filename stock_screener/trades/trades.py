@@ -22,7 +22,8 @@ from stock_screener.data.fetcher import get_ohlcv
 
 def add_trade(owner: str, ticker: str, side: str, entry_date: str,
               entry_price: float, shares: int, exit_date: Optional[str] = None,
-              exit_price: Optional[float] = None, notes: str = "") -> int:
+              exit_price: Optional[float] = None, notes: str = "",
+              setup: str = "manual") -> int:
     """Add a trade. Returns the row ID."""
     side = side.lower()
     if side not in ("long", "short"):
@@ -31,11 +32,11 @@ def add_trade(owner: str, ticker: str, side: str, entry_date: str,
     cur = conn.cursor()
     cur.execute(
         """INSERT INTO trades (owner, ticker, side, entry_date, entry_price, shares,
-                               exit_date, exit_price, notes, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                               exit_date, exit_price, notes, created_at, setup)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (owner, ticker.upper(), side, entry_date, float(entry_price), int(shares),
          exit_date, float(exit_price) if exit_price else None, notes,
-         datetime.now().isoformat()),
+         datetime.now().isoformat(), setup.lower()),
     )
     trade_id = cur.lastrowid
     conn.commit()
@@ -173,45 +174,3 @@ def grade_closed_trade(trade: dict, lookahead_days: int = 30) -> Optional[dict]:
         return {"error": str(e)}
 
 
-def suggest_exit(trade: dict, df: pd.DataFrame) -> list[str]:
-    """Heuristic exit signals for an OPEN trade. Returns list of human-readable hints."""
-    if df.empty:
-        return []
-    from stock_screener.indicators.indicators import enrich_ohlcv_with_indicators
-    df = enrich_ohlcv_with_indicators(df)
-    latest = df.iloc[-1]
-    rsi = latest.get("RSI_14")
-    close = latest.get("Close")
-    ma50 = latest.get("MA_50")
-    ma200 = latest.get("MA_200")
-    side = trade["side"]
-    entry = float(trade["entry_price"])
-
-    hints = []
-    if pd.notna(rsi):
-        if side == "long" and rsi >= 70:
-            hints.append(f"RSI {rsi:.0f} — overbought, consider taking profits")
-        if side == "short" and rsi <= 30:
-            hints.append(f"RSI {rsi:.0f} — oversold, consider covering")
-
-    if pd.notna(close) and pd.notna(ma50):
-        if side == "long" and close < ma50:
-            hints.append("Price broke below the 50d MA — momentum weakening")
-        if side == "short" and close > ma50:
-            hints.append("Price broke above the 50d MA — short thesis weakening")
-
-    # Profit / loss thresholds
-    pnl_pct = ((close - entry) / entry * 100) if side == "long" else ((entry - close) / entry * 100)
-    if pnl_pct >= 15:
-        hints.append(f"Up {pnl_pct:.1f}% — consider scaling out / trailing stop")
-    if pnl_pct <= -8:
-        hints.append(f"Down {abs(pnl_pct):.1f}% — review thesis / consider stop")
-
-    # 200d MA as longer-term trend filter
-    if pd.notna(ma200):
-        if side == "long" and close < ma200:
-            hints.append("Below the 200d MA — long-term trend has flipped against you")
-        if side == "short" and close > ma200:
-            hints.append("Above the 200d MA — long-term trend against the short")
-
-    return hints

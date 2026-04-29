@@ -40,8 +40,9 @@ from stock_screener.auth.users import (
 )
 from stock_screener.trades.trades import (
     add_trade, close_trade, delete_trade as remove_trade,
-    list_trades, compute_pnl, grade_closed_trade, suggest_exit,
+    list_trades, compute_pnl, grade_closed_trade,
 )
+from stock_screener.exits import evaluate_exit, SETUP_CHOICES
 
 
 # Bloomberg-terminal-style palette
@@ -797,11 +798,22 @@ def render_trades_tab(owner: str):
 
     # ---- Add trade form ----
     with st.expander("➕ Log a new trade", expanded=False):
+        setup_labels = {
+            "Manual / other": "manual",
+            "Momentum (Runaway Gap)": "momentum",
+            "Reversal (Bullish Div.)": "reversal",
+            "Caution (Bearish Div.)": "caution",
+            "Fade (Gap Up + Light Vol)": "fade",
+        }
         with st.form("add_trade", clear_on_submit=True):
             f1, f2, f3 = st.columns(3)
             with f1:
                 t_ticker = st.text_input("Ticker", placeholder="AAPL").upper().strip()
                 t_side = st.selectbox("Side", ["long", "short"])
+                t_setup_label = st.selectbox(
+                    "Setup", list(setup_labels.keys()),
+                    help="The exit advisor uses this to pick the right playbook.",
+                )
             with f2:
                 t_entry_date = st.date_input("Entry date", value=datetime.now().date())
                 t_entry_price = st.number_input("Entry price", min_value=0.01, value=100.00, step=0.01, format="%.2f")
@@ -829,6 +841,7 @@ def render_trades_tab(owner: str):
                         exit_date=t_exit_date.isoformat() if t_exit_date else None,
                         exit_price=t_exit_price if t_already_closed else None,
                         notes=t_notes,
+                        setup=setup_labels[t_setup_label],
                     )
                     st.success(f"Logged {t_side} {t_shares} {t_ticker} @ ${t_entry_price:.2f}")
                     st.rerun()
@@ -860,15 +873,22 @@ def render_trades_tab(owner: str):
 
             color = BULL if pnl >= 0 else BEAR
             sign = "+" if pnl >= 0 else ""
-            hints = suggest_exit(trade, df) if df is not None else []
+            verdict = evaluate_exit(trade, df) if df is not None else None
+            setup_label = (trade.get("setup") or "manual").lower()
 
             with st.container():
                 cols = st.columns([2, 1, 1, 1, 1, 1])
                 with cols[0]:
+                    setup_pill = (
+                        f"<span style='display:inline-block;padding:2px 8px;border-radius:10px;"
+                        f"background:rgba(0,217,255,0.10);color:{ACCENT};font-size:0.68rem;"
+                        f"font-weight:600;letter-spacing:0.06em;text-transform:uppercase;"
+                        f"margin-left:8px;'>{setup_label}</span>"
+                    )
                     st.markdown(
                         f"<div style='font-family:JetBrains Mono,monospace;font-weight:700;color:{ACCENT};font-size:1.1rem;'>"
                         f"{trade['ticker']} <span style='color:{MUTED};font-weight:400;font-size:0.8rem;'>· "
-                        f"{trade['side'].upper()} · {trade['shares']} sh</span></div>"
+                        f"{trade['side'].upper()} · {trade['shares']} sh</span>{setup_pill}</div>"
                         f"<div style='color:{MUTED};font-size:0.78rem;'>Entered {trade['entry_date']} @ ${trade['entry_price']:.2f}</div>",
                         unsafe_allow_html=True,
                     )
@@ -892,12 +912,32 @@ def render_trades_tab(owner: str):
                         st.success(f"Closed {trade['ticker']} @ ${new_exit:.2f}")
                         st.rerun()
 
-                if hints:
+                if verdict is not None:
+                    action_color = {"exit": BEAR, "trim": WARN, "hold": MUTED}.get(verdict.action, MUTED)
+                    bg_alpha = {"high": 0.16, "medium": 0.10, "low": 0.05}.get(verdict.confidence, 0.05)
+                    bg_rgb = {BEAR: "248,81,73", WARN: "217,153,34", MUTED: "139,148,158"}.get(action_color, "139,148,158")
+                    levels_html = ""
+                    if verdict.key_levels:
+                        items = " · ".join(
+                            f"<span style='color:{MUTED};'>{k.replace('_',' ')}:</span> "
+                            f"<span style='color:{TEXT};font-family:JetBrains Mono,monospace;'>${v:.2f}</span>"
+                            for k, v in verdict.key_levels.items()
+                        )
+                        levels_html = (
+                            f"<div style='font-size:0.72rem;margin-top:6px;'>{items}</div>"
+                        )
+                    rules_html = ""
+                    if verdict.rules_fired:
+                        rules_html = "<ul style='margin:6px 0 0 18px;padding:0;font-size:0.82rem;'>" + "".join(
+                            f"<li style='margin:2px 0;'>{r}</li>" for r in verdict.rules_fired
+                        ) + "</ul>"
                     st.markdown(
-                        f"<div style='background:rgba(217,153,34,0.08);border-left:3px solid {WARN};"
-                        f"padding:8px 12px;border-radius:6px;margin:6px 0 14px 0;font-size:0.82rem;'>"
-                        f"<strong style='color:{WARN};'>💡 Exit signals:</strong> "
-                        f"{' · '.join(hints)}</div>",
+                        f"<div style='background:rgba({bg_rgb},{bg_alpha});border-left:3px solid {action_color};"
+                        f"padding:10px 14px;border-radius:6px;margin:6px 0 14px 0;'>"
+                        f"<div style='font-family:JetBrains Mono,monospace;font-weight:700;color:{action_color};"
+                        f"font-size:0.82rem;letter-spacing:0.06em;text-transform:uppercase;'>"
+                        f"{verdict.context}</div>"
+                        f"{rules_html}{levels_html}</div>",
                         unsafe_allow_html=True,
                     )
                 else:
