@@ -80,16 +80,24 @@ def update_earnings_calendar(tickers: list, lookahead_days: int = 60,
     cursor = conn.cursor()
 
     today = datetime.now().date()
-    start = (today - timedelta(days=lookback_days)).isoformat()
-    end = (today + timedelta(days=lookahead_days)).isoformat()
+    today_iso = today.isoformat()
+    past_start = (today - timedelta(days=lookback_days)).isoformat()
+    past_end = (today - timedelta(days=1)).isoformat()
+    future_start = today_iso
+    future_end = (today + timedelta(days=lookahead_days)).isoformat()
 
     past_dates: dict[str, str] = {}
     future_dates: dict[str, str] = {}
     if FINNHUB_KEY:
-        print(f"Fetching earnings from Finnhub: {start} to {end}")
-        rows = _fetch_finnhub_earnings_window(start, end)
-        past_dates, future_dates = _split_past_future(rows, today.isoformat())
-        print(f"  Finnhub returned {len(rows)} rows: "
+        # Two separate queries: Finnhub caps each response at ~1500 rows, so
+        # a wide window combining past + future would silently drop one side.
+        print(f"Fetching past earnings from Finnhub: {past_start} to {past_end}")
+        past_rows = _fetch_finnhub_earnings_window(past_start, past_end)
+        past_dates, _ = _split_past_future(past_rows, today_iso)
+        print(f"Fetching upcoming earnings from Finnhub: {future_start} to {future_end}")
+        future_rows = _fetch_finnhub_earnings_window(future_start, future_end)
+        _, future_dates = _split_past_future(future_rows, today_iso)
+        print(f"  Finnhub returned {len(past_rows)} past + {len(future_rows)} future rows: "
               f"{len(future_dates)} upcoming, {len(past_dates)} recent")
     else:
         print("FINNHUB_API_KEY not set — falling back to yfinance (slow, upcoming only).")
