@@ -701,6 +701,94 @@ def create_rsi_chart(df: pd.DataFrame) -> go.Figure:
     return style_plotly(fig, title="RSI(14)")
 
 
+def create_combined_chart(df: pd.DataFrame, signals: list = None) -> go.Figure:
+    """Stacked price + RSI + volume sharing a single x-axis.
+
+    Mirrors a stockcharts.com-style layout: candlesticks with MAs on top
+    (60%), RSI panel (20%), volume panel (20%). All three line up vertically
+    so a date on the price chart maps to the same x-position in RSI and
+    volume — easier eye-flow than three independently scaled charts.
+    """
+    from plotly.subplots import make_subplots
+    fig = make_subplots(
+        rows=3, cols=1, shared_xaxes=True,
+        vertical_spacing=0.03, row_heights=[0.62, 0.19, 0.19],
+    )
+
+    # --- Row 1: Price + MAs ---
+    fig.add_trace(go.Candlestick(
+        x=df["Date"], open=df["Open"], high=df["High"], low=df["Low"], close=df["Close"],
+        name="OHLC",
+        increasing=dict(line=dict(color=BULL), fillcolor=BULL),
+        decreasing=dict(line=dict(color=BEAR), fillcolor=BEAR),
+        showlegend=False,
+    ), row=1, col=1)
+    fig.add_trace(go.Scatter(x=df["Date"], y=df["MA_50"], mode="lines", name="MA(50)",
+                             line=dict(color="#a78bfa", width=1.2)), row=1, col=1)
+    fig.add_trace(go.Scatter(x=df["Date"], y=df["MA_100"], mode="lines", name="MA(100)",
+                             line=dict(color="#fb923c", width=1.2)), row=1, col=1)
+    fig.add_trace(go.Scatter(x=df["Date"], y=df["MA_200"], mode="lines", name="MA(200)",
+                             line=dict(color="#fbbf24", width=1.2)), row=1, col=1)
+
+    if signals:
+        for sig in signals:
+            sig_date = sig.get("date")
+            if not sig_date:
+                continue
+            try:
+                row = df[df["Date"] == sig_date]
+                if row.empty:
+                    continue
+                price = float(row["High"].iloc[0])
+                fig.add_annotation(
+                    x=sig_date, y=price, xref="x", yref="y",
+                    text=f"<b>{sig['label']}</b>",
+                    showarrow=True, arrowhead=2, arrowsize=1.2, arrowwidth=2,
+                    arrowcolor=sig.get("color", ACCENT),
+                    bgcolor=sig.get("color", ACCENT),
+                    font=dict(color="#0d1117", size=11, family="Inter,sans-serif"),
+                    bordercolor=sig.get("color", ACCENT), borderwidth=1,
+                    ax=0, ay=-40, opacity=0.95,
+                )
+            except Exception:
+                continue
+
+    # --- Row 2: RSI ---
+    fig.add_trace(go.Scatter(
+        x=df["Date"], y=df["RSI_14"], mode="lines", name="RSI(14)",
+        line=dict(color=ACCENT, width=2),
+        fill="tozeroy", fillcolor="rgba(0,217,255,0.06)",
+        showlegend=False,
+    ), row=2, col=1)
+    fig.add_hline(y=70, line_dash="dash", line_color=BEAR, line_width=1, row=2, col=1)
+    fig.add_hline(y=30, line_dash="dash", line_color=BULL, line_width=1, row=2, col=1)
+    fig.add_hline(y=50, line_dash="dot", line_color=BORDER, line_width=1, row=2, col=1)
+
+    # --- Row 3: Volume ---
+    bar_colors = [BULL if c >= o else BEAR for c, o in zip(df["Close"], df["Open"])]
+    fig.add_trace(go.Bar(
+        x=df["Date"], y=df["Volume"], name="Volume",
+        marker=dict(color=bar_colors, opacity=0.7), showlegend=False,
+    ), row=3, col=1)
+    fig.add_trace(go.Scatter(
+        x=df["Date"], y=df["Avg_Volume_30d"], mode="lines", name="Avg Vol(30d)",
+        line=dict(color=ACCENT, width=2),
+    ), row=3, col=1)
+
+    fig.update_layout(
+        height=720, hovermode="x unified",
+        xaxis=dict(rangeslider=dict(visible=False)),
+        xaxis2=dict(rangeslider=dict(visible=False)),
+        xaxis3=dict(rangeslider=dict(visible=False)),
+        margin=dict(l=10, r=10, t=10, b=10),
+        legend=dict(orientation="h", y=1.02, x=0, bgcolor="rgba(0,0,0,0)"),
+    )
+    fig.update_yaxes(title_text="Price ($)", row=1, col=1)
+    fig.update_yaxes(title_text="RSI", range=[0, 100], row=2, col=1)
+    fig.update_yaxes(title_text="Volume", row=3, col=1)
+    return style_plotly(fig)
+
+
 def create_volume_chart(df: pd.DataFrame) -> go.Figure:
     # Color volume bars by daily price direction (green = up day, red = down day)
     colors = [BULL if c >= o else BEAR for c, o in zip(df["Close"], df["Open"])]
@@ -2164,13 +2252,11 @@ def detail_view(ticker: str, scans: dict = None):
                 "≥50% back toward the prior close. >60% = consistent fader, <30% = trend-after-print."
             )
 
-        # Charts
-        st.plotly_chart(create_price_chart(df.tail(120), signals=signals), width='stretch')
-        c1, c2 = st.columns(2)
-        with c1:
-            st.plotly_chart(create_rsi_chart(df.tail(120)), width='stretch')
-        with c2:
-            st.plotly_chart(create_volume_chart(df.tail(120)), width='stretch')
+        # Combined stacked chart (price + RSI + volume on a shared x-axis,
+        # like a stockcharts.com layout). One vertical eye-line through all
+        # three panels — way faster to scan than three separate charts.
+        st.plotly_chart(create_combined_chart(df.tail(120), signals=signals),
+                        width='stretch')
 
         # Recent news headlines — confirms catalyst tag and gives the trader
         # context ('is this earnings? FDA? buyout?') without leaving the page.
