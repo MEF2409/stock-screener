@@ -789,6 +789,116 @@ def render_signal_density(days: int = 90):
     st.plotly_chart(style_plotly(fig, title=f"Signal Density · last {days} days"), width='stretch')
 
 
+def _render_trade_replay(trade: dict) -> None:
+    """Side-by-side: what the trader did vs what the playbook would have done.
+
+    Plots the price between entry and exit (with 20d / 5d buffers), pins
+    actual entry & exit, then walks evaluate_exit forward day-by-day from
+    entry to find the playbook's first 'exit' verdict and pins that too.
+    """
+    try:
+        df_full = get_ohlcv(trade["ticker"])
+        if df_full is None or df_full.empty:
+            st.caption("No price data to replay this trade.")
+            return
+        df_full = df_full.sort_values("Date").reset_index(drop=True)
+        entry_idx_list = df_full.index[df_full["Date"] >= trade["entry_date"]].tolist()
+        exit_idx_list = df_full.index[df_full["Date"] >= trade["exit_date"]].tolist()
+        if not entry_idx_list or not exit_idx_list:
+            st.caption("Couldn't align trade dates to OHLCV history.")
+            return
+        entry_idx = entry_idx_list[0]
+        exit_idx = exit_idx_list[0]
+        win_start = max(0, entry_idx - 20)
+        win_end = min(len(df_full), exit_idx + 6)
+        df = df_full.iloc[win_start:win_end].copy()
+
+        # Walk the playbook forward from entry_idx until 'exit' fires
+        from stock_screener.exits import evaluate_exit
+        synthetic = {
+            "ticker": trade["ticker"], "side": trade["side"],
+            "setup": (trade.get("setup") or "manual").lower(),
+            "entry_date": trade["entry_date"],
+            "entry_price": float(trade["entry_price"]),
+            "shares": int(trade["shares"]),
+        }
+        playbook_idx = None
+        playbook_reason = None
+        for j in range(entry_idx + 1, min(entry_idx + 31, len(df_full))):
+            snap = df_full.iloc[: j + 1].copy()
+            v = evaluate_exit(synthetic, snap)
+            if v.action == "exit":
+                playbook_idx = j
+                playbook_reason = v.rules_fired[0] if v.rules_fired else "playbook exit"
+                break
+
+        side = trade["side"]
+        entry_price = float(trade["entry_price"])
+        exit_price = float(trade["exit_price"])
+        actual_ret = ((exit_price - entry_price) / entry_price * 100
+                      if side == "long"
+                      else (entry_price - exit_price) / entry_price * 100)
+        if playbook_idx is not None:
+            pbk_price = float(df_full.iloc[playbook_idx]["Close"])
+            pbk_date = df_full.iloc[playbook_idx]["Date"]
+            pbk_ret = ((pbk_price - entry_price) / entry_price * 100
+                       if side == "long"
+                       else (entry_price - pbk_price) / entry_price * 100)
+        else:
+            pbk_price = pbk_date = pbk_ret = None
+
+        # Chart
+        import plotly.graph_objects as go
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=df["Date"], y=df["Close"], mode="lines", name="Close",
+            line=dict(color=ACCENT, width=2),
+        ))
+        fig.add_vline(x=trade["entry_date"], line_color=BULL, line_dash="dot",
+                      annotation_text="ENTRY", annotation_position="top",
+                      annotation_font_color=BULL)
+        fig.add_vline(x=trade["exit_date"], line_color=WARN, line_dash="dot",
+                      annotation_text="YOUR EXIT", annotation_position="top",
+                      annotation_font_color=WARN)
+        if pbk_date is not None:
+            fig.add_vline(x=pbk_date, line_color="#a78bfa", line_dash="dash",
+                          annotation_text="PLAYBOOK EXIT", annotation_position="bottom",
+                          annotation_font_color="#a78bfa")
+        fig.update_layout(height=300, margin=dict(l=10, r=10, t=10, b=10),
+                          showlegend=False)
+        st.plotly_chart(style_plotly(fig), width='stretch')
+
+        # Verdict line
+        if pbk_ret is None:
+            verdict = (
+                f"Playbook didn't fire an exit within 30 days — your manual close "
+                f"was the entire trade. Actual: {actual_ret:+.2f}%."
+            )
+            verdict_color = MUTED
+        else:
+            delta = actual_ret - pbk_ret
+            if abs(delta) < 0.5:
+                verdict = f"You ≈ playbook ({actual_ret:+.2f}% vs {pbk_ret:+.2f}%)."
+                verdict_color = MUTED
+            elif delta > 0:
+                verdict = (f"You beat the playbook by {delta:+.2f}% "
+                           f"({actual_ret:+.2f}% vs {pbk_ret:+.2f}%) — "
+                           f"the rule that would've fired: {playbook_reason}")
+                verdict_color = BULL
+            else:
+                verdict = (f"Playbook would've kept {abs(delta):.2f}% more "
+                           f"({pbk_ret:+.2f}% vs your {actual_ret:+.2f}%) — "
+                           f"the rule that would've fired: {playbook_reason}")
+                verdict_color = BEAR
+        st.markdown(
+            f"<div style='font-size:0.85rem;color:{verdict_color};margin:4px 0 12px 0;'>"
+            f"{verdict}</div>",
+            unsafe_allow_html=True,
+        )
+    except Exception as e:
+        st.caption(f"Replay error: {e}")
+
+
 def render_trades_tab(owner: str):
     """Trade journal: log positions, see live P&L, grade closed trades."""
     if not owner:
@@ -1145,9 +1255,23 @@ def render_trades_tab(owner: str):
                         unsafe_allow_html=True,
                     )
                 with cols[4]:
-                    if st.button("Delete", key=f"del_trade_{trade['id']}", use_container_width=True):
-                        remove_trade(trade["id"])
-                        st.rerun()
+                    rcol, dcol = st.columns(2)
+                    with rcol:
+                        if st.button("Replay", key=f"replay_btn_{trade['id']}", use_container_width=True):
+                            cur = st.session_state.get("replay_trade_id")
+                            st.session_state["replay_trade_id"] = (
+                                None if cur == trade["id"] else trade["id"]
+                            )
+                            st.rerun()
+                    with dcol:
+                        if st.button("Delete", key=f"del_trade_{trade['id']}", use_container_width=True):
+                            remove_trade(trade["id"])
+                            if st.session_state.get("replay_trade_id") == trade["id"]:
+                                st.session_state["replay_trade_id"] = None
+                            st.rerun()
+
+                if st.session_state.get("replay_trade_id") == trade["id"]:
+                    _render_trade_replay(trade)
 
                 if grade_info.get("msg"):
                     bg = "rgba(63,185,80,0.06)" if grade in ("A", "B") else "rgba(248,81,73,0.06)"
