@@ -228,7 +228,12 @@ def scan_gap_up_normal_volume(ticker: str) -> dict:
             "reason": "Gap Up Normal Volume (short candidate)" if flagged else "No short setup",
             "date": today["Date"],
             "open": today["Open"],
-            "close": today["Close"],
+            # `close` here is the *prior session's* close — the gap-up reference.
+            # During the morning Fade run today["Close"] is just an intraday
+            # tick that moves with every fetch and doesn't tell the user
+            # anything about the gap. Showing yesterday's close lets the user
+            # compute the gap directly: today's open vs. this number.
+            "close": yesterday["Close"],
             "volume": today["Volume"],
             "avg_volume_30d": today["Avg_Volume_30d"],
             "ma_50": today["MA_50"],
