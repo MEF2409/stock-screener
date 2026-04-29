@@ -20,23 +20,20 @@ RUN echo 'precedence ::ffff:0:0/96  100' >> /etc/gai.conf
 ENV PIP_DEFAULT_TIMEOUT=300 \
     PIP_RETRIES=15 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    PIP_PREFER_BINARY=1
+    PIP_PREFER_BINARY=1 \
+    UV_HTTP_TIMEOUT=300
+
+# Use uv (Astral's Rust-based pip replacement) instead of pip. Pip's urllib3
+# was getting RST mid-handshake from Fly's and Depot's builder networks to
+# Fastly's PyPI edge — gai.conf v4 preference didn't help. uv uses HTTP/2,
+# parallel downloads, and more aggressive retry/keepalive, which sidesteps
+# the issue.
+COPY --from=ghcr.io/astral-sh/uv:0.5.11 /uv /usr/local/bin/uv
 
 COPY pyproject.toml requirements.txt ./
 
-RUN pip install --no-cache-dir --upgrade pip
-
-# Heavy scientific stack first — these dominate download size; cache them aggressively
-RUN pip install --no-cache-dir numpy pandas
-
-# Streamlit + Plotly stack
-RUN pip install --no-cache-dir streamlit plotly streamlit-aggrid streamlit-authenticator
-
-# Data fetchers
-RUN pip install --no-cache-dir yfinance requests
-
-# Everything else from requirements (mostly satisfied at this point)
-RUN pip install --no-cache-dir -r requirements.txt
+# Single resolution pass, system Python, no cache layer fluff.
+RUN uv pip install --system --no-cache -r requirements.txt
 
 # Copy source
 COPY stock_screener/ ./stock_screener/
@@ -49,7 +46,7 @@ RUN mkdir -p /data/db /data/results && \
     ln -sf /data/results /app/results
 
 # Editable install so `from stock_screener.X import Y` resolves
-RUN pip install --no-cache-dir -e .
+RUN uv pip install --system --no-cache -e .
 
 # Entrypoint writes auth_config.yaml from $AUTH_CONFIG_YAML env var, then runs streamlit
 COPY entrypoint.sh /app/entrypoint.sh
