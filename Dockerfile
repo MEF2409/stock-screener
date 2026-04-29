@@ -23,12 +23,13 @@ ENV PIP_DEFAULT_TIMEOUT=300 \
     PIP_PREFER_BINARY=1 \
     UV_HTTP_TIMEOUT=300
 
-# Use uv (Astral's Rust-based pip replacement) instead of pip. Pip's urllib3
-# was getting RST mid-handshake from Fly's and Depot's builder networks to
-# Fastly's PyPI edge — gai.conf v4 preference didn't help. uv uses HTTP/2,
-# parallel downloads, and more aggressive retry/keepalive, which sidesteps
-# the issue.
-COPY --from=ghcr.io/astral-sh/uv:0.5.11 /uv /usr/local/bin/uv
+# Use uv (Astral's Rust-based pip replacement) instead of pip — uv has more
+# resilient retry/keepalive than urllib3, which matters because Fly/Depot's
+# remote builder has been getting RST mid-handshake on PyPI requests.
+# Builds now run on GitHub Actions runners (see .github/workflows/deploy.yml),
+# so fetching the installer over the network here is reliable.
+ADD https://astral.sh/uv/0.5.11/install.sh /uv-installer.sh
+RUN sh /uv-installer.sh && mv /root/.local/bin/uv /usr/local/bin/uv && rm /uv-installer.sh
 
 COPY pyproject.toml requirements.txt ./
 
