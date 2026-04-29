@@ -40,7 +40,7 @@ from stock_screener.auth.users import (
 )
 from stock_screener.trades.trades import (
     add_trade, close_trade, delete_trade as remove_trade,
-    list_trades, compute_pnl, grade_closed_trade,
+    list_trades, compute_pnl, grade_closed_trade, setup_edge_stats,
 )
 from stock_screener.exits import evaluate_exit, SETUP_CHOICES
 
@@ -949,6 +949,85 @@ def render_trades_tab(owner: str):
             f"Unrealized total: {'+' if total_unrealized >= 0 else ''}${total_unrealized:,.2f}</div>",
             unsafe_allow_html=True,
         )
+
+    # ---- Edge by setup ----
+    if not closed_df.empty:
+        edge = setup_edge_stats(closed_df)
+        if not edge.empty:
+            st.markdown('<div class="mp-section-label" style="margin-top:32px;">Edge by Setup</div>',
+                        unsafe_allow_html=True)
+            st.caption(
+                "How each playbook actually performs across your closed trades. "
+                "Profit factor > 1.5 with ≥10 trades = real edge worth leaning into."
+            )
+
+            pf_fmt = JsCode(
+                "function(p){if(p.value==null)return '';"
+                "if(!isFinite(p.value))return '∞';"
+                "return Number(p.value).toFixed(2);}"
+            )
+            pct_fmt = JsCode(
+                "function(p){if(p.value==null)return '';const n=Number(p.value);"
+                "return (n>=0?'+':'')+n.toFixed(2)+'%';}"
+            )
+            wr_fmt = JsCode("function(p){return p.value==null?'':Number(p.value).toFixed(0)+'%';}")
+            days_fmt = JsCode("function(p){return p.value==null?'':Number(p.value).toFixed(1)+'d';}")
+            ret_style = JsCode(
+                "function(p){if(p.value==null)return null;const v=Number(p.value);"
+                "const base={fontFamily:'JetBrains Mono,monospace',textAlign:'right',fontWeight:'700'};"
+                "if(v>0)return{...base,color:'#3fb950'};"
+                "if(v<0)return{...base,color:'#f85149'};"
+                "return{...base,color:'#8b949e'};}"
+            )
+            wr_style = JsCode(
+                "function(p){if(p.value==null)return null;const v=Number(p.value);"
+                "const base={fontFamily:'JetBrains Mono,monospace',textAlign:'right'};"
+                "if(v>=60)return{...base,color:'#3fb950',fontWeight:'700'};"
+                "if(v>=40)return{...base,color:'#8b949e'};"
+                "return{...base,color:'#f85149'};}"
+            )
+            pf_style = JsCode(
+                "function(p){if(p.value==null||!isFinite(p.value))return {fontFamily:'JetBrains Mono,monospace',textAlign:'right',color:'#3fb950',fontWeight:'700'};"
+                "const v=Number(p.value);const base={fontFamily:'JetBrains Mono,monospace',textAlign:'right',fontWeight:'700'};"
+                "if(v>=1.5)return{...base,color:'#3fb950'};"
+                "if(v>=1.0)return{...base,color:'#8b949e'};"
+                "return{...base,color:'#f85149'};}"
+            )
+            setup_style = JsCode(
+                "function(p){return {fontFamily:'JetBrains Mono,monospace',color:'#00d9ff',"
+                "fontWeight:'700',letterSpacing:'0.04em',textTransform:'uppercase'};}"
+            )
+            numeric = {"fontFamily": "JetBrains Mono, monospace", "textAlign": "right", "color": TEXT}
+
+            edge_disp = edge.rename(columns={
+                "setup": "Setup", "trades": "Trades", "win_rate": "Win Rate",
+                "avg_return_pct": "Avg Return", "profit_factor": "Profit Factor",
+                "avg_hold_days": "Avg Hold", "best_pct": "Best", "worst_pct": "Worst",
+            })
+            gb = GridOptionsBuilder.from_dataframe(edge_disp)
+            gb.configure_default_column(sortable=True, resizable=True, flex=1, unSortIcon=True, filter=False)
+            gb.configure_column("Setup", cellStyle=setup_style, width=120)
+            gb.configure_column("Trades", type=["numericColumn"], cellStyle=numeric, width=90,
+                                headerTooltip="Sample size — fewer than 10 means stats are noise.")
+            gb.configure_column("Win Rate", type=["numericColumn"], valueFormatter=wr_fmt,
+                                cellStyle=wr_style, width=110)
+            gb.configure_column("Avg Return", type=["numericColumn"], valueFormatter=pct_fmt,
+                                cellStyle=ret_style, width=120,
+                                headerTooltip="Per-trade average return %. The actual edge.")
+            gb.configure_column("Profit Factor", type=["numericColumn"], valueFormatter=pf_fmt,
+                                cellStyle=pf_style, width=130,
+                                headerTooltip="Gross winners / gross losers. >1.5 with ≥10 trades = strong setup.")
+            gb.configure_column("Avg Hold", type=["numericColumn"], valueFormatter=days_fmt,
+                                cellStyle=numeric, width=110)
+            gb.configure_column("Best", type=["numericColumn"], valueFormatter=pct_fmt,
+                                cellStyle=ret_style, width=100)
+            gb.configure_column("Worst", type=["numericColumn"], valueFormatter=pct_fmt,
+                                cellStyle=ret_style, width=100)
+
+            AgGrid(edge_disp, gridOptions=gb.build(),
+                   height=60 + 35 * len(edge_disp),
+                   allow_unsafe_jscode=True, use_json_serialization=True,
+                   theme="balham-dark", custom_css=GRID_CSS, key="edge_by_setup")
 
     # ---- Closed trades + grading ----
     st.markdown('<div class="mp-section-label" style="margin-top:32px;">Closed Trades</div>',

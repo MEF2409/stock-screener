@@ -110,6 +110,52 @@ def _letter_grade(capture_pct: float) -> str:
     return "F"
 
 
+def setup_edge_stats(closed_df: pd.DataFrame) -> pd.DataFrame:
+    """Per-setup performance stats over the user's closed trades.
+
+    Returns one row per setup with: trades, win_rate, avg_return_pct,
+    profit_factor, avg_hold_days, best_pct, worst_pct. Used by the
+    dashboard's 'Edge by Setup' panel — the trader leans into the setups
+    that show real edge and prunes the ones that don't.
+    """
+    if closed_df is None or closed_df.empty:
+        return pd.DataFrame()
+
+    df = closed_df.copy()
+    if "setup" not in df.columns:
+        df["setup"] = "manual"
+    df["setup"] = df["setup"].fillna("manual").str.lower()
+
+    # Per-trade return % (signed by side)
+    def _ret(row):
+        e, x, side = float(row["entry_price"]), float(row["exit_price"]), row["side"]
+        return ((x - e) / e * 100) if side == "long" else ((e - x) / e * 100)
+
+    df["ret_pct"] = df.apply(_ret, axis=1)
+    df["entry_dt"] = pd.to_datetime(df["entry_date"], errors="coerce")
+    df["exit_dt"] = pd.to_datetime(df["exit_date"], errors="coerce")
+    df["hold_days"] = (df["exit_dt"] - df["entry_dt"]).dt.days
+
+    out = []
+    for setup, g in df.groupby("setup"):
+        wins = g[g["ret_pct"] > 0]["ret_pct"]
+        losses = g[g["ret_pct"] <= 0]["ret_pct"]
+        gross_win = wins.sum()
+        gross_loss = abs(losses.sum())
+        profit_factor = (gross_win / gross_loss) if gross_loss > 0 else (float("inf") if gross_win > 0 else 0)
+        out.append({
+            "setup": setup,
+            "trades": len(g),
+            "win_rate": (len(wins) / len(g) * 100) if len(g) else 0,
+            "avg_return_pct": float(g["ret_pct"].mean()),
+            "profit_factor": profit_factor,
+            "avg_hold_days": float(g["hold_days"].mean()) if g["hold_days"].notna().any() else 0,
+            "best_pct": float(g["ret_pct"].max()),
+            "worst_pct": float(g["ret_pct"].min()),
+        })
+    return pd.DataFrame(out).sort_values("avg_return_pct", ascending=False).reset_index(drop=True)
+
+
 def grade_closed_trade(trade: dict, lookahead_days: int = 30) -> Optional[dict]:
     """For a closed trade, evaluate what the best post-exit price would have been.
     Returns {grade, capture_pct, best_price, best_date, missed_dollars, msg}."""
