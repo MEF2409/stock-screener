@@ -117,7 +117,8 @@ _SETUP_SIDE = {"momentum": "long", "reversal": "long", "caution": "short", "fade
 
 def backtest_with_playbook(setup: str, tickers: list[str], start_date: str, end_date: str,
                            max_hold_days: int = 30,
-                           progress_callback: Callable | None = None) -> pd.DataFrame:
+                           progress_callback: Callable | None = None,
+                           params=None) -> pd.DataFrame:
     """Replay scanner entries AND apply the exit playbook day-by-day.
 
     For each (ticker, date) the scanner flags, simulate a trade entered at
@@ -193,7 +194,7 @@ def backtest_with_playbook(setup: str, tickers: list[str], start_date: str, end_
                     else:
                         running_extreme = max(running_extreme, float(bar["High"]))
                     snapshot = df.iloc[: j + 1].copy()
-                    verdict = evaluate_exit(trade, snapshot)
+                    verdict = evaluate_exit(trade, snapshot, params=params)
                     if verdict.action == "exit":
                         exit_idx = j
                         exit_reason = (verdict.rules_fired[0] if verdict.rules_fired
@@ -229,7 +230,8 @@ def backtest_with_playbook(setup: str, tickers: list[str], start_date: str, end_
 
 def walk_forward_backtest(setup: str, tickers: list[str], start_date: str, end_date: str,
                           n_folds: int = 4, max_hold_days: int = 30,
-                          progress_callback: Callable | None = None) -> list[dict]:
+                          progress_callback: Callable | None = None,
+                          params=None) -> list[dict]:
     """Split [start_date, end_date] into N equal time folds and run the
     playbook backtest on each. Returns per-fold summary stats so the
     trader can see how much edge varies across regimes.
@@ -251,6 +253,7 @@ def walk_forward_backtest(setup: str, tickers: list[str], start_date: str, end_d
             start_date=f_start, end_date=f_end,
             max_hold_days=max_hold_days,
             progress_callback=progress_callback,
+            params=params,
         )
         s_dict = summarize_playbook(df)
         s_dict["fold"] = i + 1

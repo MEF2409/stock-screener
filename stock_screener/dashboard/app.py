@@ -37,6 +37,7 @@ from stock_screener.backtest.backtest import (
     backtest_scanner, summarize_results,
     backtest_with_playbook, summarize_playbook, walk_forward_backtest,
 )
+from stock_screener.exits import PlaybookParams, DEFAULT_PARAMS
 from stock_screener.auth.users import (
     signup as user_signup, list_users, set_status, delete_user,
     is_admin, get_approved_credentials, seed_from_yaml,
@@ -1494,6 +1495,7 @@ def render_backtest_tab(tickers: list[str]):
              "actually work.",
     )
     walk_forward_n = 1
+    custom_params = None
     if apply_playbook:
         walk_forward_n = st.slider(
             "Walk-forward folds", min_value=1, max_value=6, value=1, key="bt_folds",
@@ -1501,6 +1503,33 @@ def render_backtest_tab(tickers: list[str]):
                  "stats. Stable profit factor across folds = robust rules. Wildly "
                  "different per-fold = overfit to one regime.",
         )
+        if scanner == "Fade":
+            with st.expander("🔧 Tune Fade playbook (overrides defaults for this run)", expanded=False):
+                st.caption(
+                    "Adjust the Fade exit rules and re-run. Compares each tweak's "
+                    "profit factor against the shipping defaults so you can find "
+                    "rules that *demonstrably* work, not just feel right."
+                )
+                tc1, tc2 = st.columns(2)
+                with tc1:
+                    target_pct = st.slider("Full target (% down)", 1.0, 15.0,
+                                           DEFAULT_PARAMS.fade_target_pct, 0.5)
+                    partial_pct = st.slider("Partial trim (% down)", 0.5, 10.0,
+                                            DEFAULT_PARAMS.fade_partial_pct, 0.5)
+                    against_pct = st.slider("Trim if up against (%)", 0.5, 8.0,
+                                            DEFAULT_PARAMS.fade_against_pct, 0.5)
+                with tc2:
+                    stop_atr = st.slider("Stop (× ATR)", 0.5, 4.0,
+                                         DEFAULT_PARAMS.fade_stop_atr, 0.25)
+                    target_atr = st.slider("Target (× ATR)", 0.5, 5.0,
+                                           DEFAULT_PARAMS.fade_target_atr, 0.25)
+                    time_stop_d = st.slider("Time stop (days)", 1, 14,
+                                            DEFAULT_PARAMS.fade_time_stop_days, 1)
+                custom_params = PlaybookParams(
+                    fade_target_pct=target_pct, fade_partial_pct=partial_pct,
+                    fade_against_pct=against_pct, fade_stop_atr=stop_atr,
+                    fade_target_atr=target_atr, fade_time_stop_days=time_stop_d,
+                )
     start_date = (end_date - timedelta(days=days_back)).isoformat()
 
     if st.button("▶ Run backtest", type="primary", key="bt_run"):
@@ -1522,12 +1551,14 @@ def render_backtest_tab(tickers: list[str]):
                 setup=setup_map[scanner], tickers=tickers,
                 start_date=start_date, end_date=end_date.isoformat(),
                 max_hold_days=30, progress_callback=cb,
+                params=custom_params,
             )
             if walk_forward_n > 1:
                 folds = walk_forward_backtest(
                     setup=setup_map[scanner], tickers=tickers,
                     start_date=start_date, end_date=end_date.isoformat(),
-                    n_folds=walk_forward_n, max_hold_days=30, progress_callback=cb,
+                    n_folds=walk_forward_n, max_hold_days=30,
+                    progress_callback=cb, params=custom_params,
                 )
                 st.session_state["bt_folds"] = folds
             else:

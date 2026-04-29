@@ -27,6 +27,24 @@ from stock_screener.indicators.indicators import enrich_ohlcv_with_indicators
 
 SETUP_CHOICES = ["momentum", "reversal", "caution", "fade", "manual"]
 
+
+@dataclass
+class PlaybookParams:
+    """Tunable constants for the playbooks. Defaults reflect the rules
+    that ship with the app; backtest UI can override to test 'what-if'.
+    Currently only the Fade playbook reads these — others stay on baked-in
+    defaults for now."""
+    # Fade (short) playbook
+    fade_target_pct: float = 5.0          # full profit-take at price down N%
+    fade_partial_pct: float = 3.0         # trim at price down N%
+    fade_stop_atr: float = 1.5            # ATR multiplier for stop
+    fade_target_atr: float = 2.0          # ATR multiplier for target
+    fade_time_stop_days: int = 3          # exit if no follow-through after N days
+    fade_against_pct: float = 2.0         # trim if up N% against position
+
+
+DEFAULT_PARAMS = PlaybookParams()
+
 Action = Literal["hold", "trim", "exit"]
 Confidence = Literal["low", "medium", "high"]
 
@@ -82,7 +100,8 @@ def _atr(df: pd.DataFrame, n: int = 14) -> Optional[float]:
     return float(tr.tail(n).mean())
 
 
-def _evaluate_fade(trade: dict, df: pd.DataFrame, v: ExitVerdict) -> None:
+def _evaluate_fade(trade: dict, df: pd.DataFrame, v: ExitVerdict,
+                   p: PlaybookParams = DEFAULT_PARAMS) -> None:
     """Short — gap up on light volume below MAs. Cover on gap fill,
     momentum reversal, or after the catalyst stales out."""
     latest = df.iloc[-1]
@@ -91,30 +110,27 @@ def _evaluate_fade(trade: dict, df: pd.DataFrame, v: ExitVerdict) -> None:
     pnl = _pnl_pct("short", entry, mark)
     days = _days_in_trade(trade["entry_date"], as_of=str(latest.get("Date")))
 
-    # Estimated cover targets / stops. ATR fallback (entry × 1.02) gives a
-    # $0.10 stop on a $5 stock — instantly hit by 9:30 noise. Floor the stop
-    # distance at $0.25 so cheap stocks get sane room.
     atr = _atr(df)
     if atr is None:
         stop_above = entry + max(entry * 0.02, 0.25)
         target_below = entry - max(entry * 0.05, 0.50)
     else:
-        stop_above = entry + 1.5 * atr
-        target_below = entry - 2.0 * atr
+        stop_above = entry + p.fade_stop_atr * atr
+        target_below = entry - p.fade_target_atr * atr
     v.key_levels["entry"] = entry
     v.key_levels["stop"] = stop_above
     v.key_levels["target"] = target_below
 
     # Profit-side rules
-    if pnl >= 5:
+    if pnl >= p.fade_target_pct:
         v.add("exit", "high", f"Down {pnl:.1f}% — at full target, lock it in")
-    elif pnl >= 3:
+    elif pnl >= p.fade_partial_pct:
         v.add("trim", "medium", f"Down {pnl:.1f}% — partial cover, raise stop to entry")
 
     # Stop-side rules
     if mark >= stop_above:
         v.add("exit", "high", f"Mark ${mark:.2f} broke above stop ${stop_above:.2f} — fade failed")
-    elif pnl <= -2:
+    elif pnl <= -p.fade_against_pct:
         v.add("trim", "medium", f"Up {abs(pnl):.1f}% against you — tighten stop, halve size")
 
     # Trend/structure: closing back above MA50 means thesis (below MAs) is broken
@@ -123,7 +139,7 @@ def _evaluate_fade(trade: dict, df: pd.DataFrame, v: ExitVerdict) -> None:
         v.add("exit", "high", f"Closed above 50d MA (${ma50:.2f}) — short thesis broken")
 
     # Time stop: Fade signals are catalyst-driven and decay quickly
-    if days >= 3 and abs(pnl) < 1.5:
+    if days >= p.fade_time_stop_days and abs(pnl) < 1.5:
         v.add("exit", "medium", f"{days}d in trade with no follow-through — catalyst stale, free up capital")
 
     # Oversold cover into weakness
@@ -311,8 +327,11 @@ _PLAYBOOKS = {
 }
 
 
-def evaluate_exit(trade: dict, df: pd.DataFrame) -> ExitVerdict:
-    """Route an open trade to its setup playbook and return a verdict."""
+def evaluate_exit(trade: dict, df: pd.DataFrame,
+                  params: PlaybookParams = None) -> ExitVerdict:
+    """Route an open trade to its setup playbook and return a verdict.
+    `params` overrides default playbook constants (only the Fade playbook
+    reads them currently)."""
     v = ExitVerdict()
     if df is None or df.empty or len(df) < 2:
         v.context = "Not enough price data to evaluate."
@@ -321,7 +340,10 @@ def evaluate_exit(trade: dict, df: pd.DataFrame) -> ExitVerdict:
     df = enrich_ohlcv_with_indicators(df)
     setup = (trade.get("setup") or "manual").lower()
     playbook = _PLAYBOOKS.get(setup, _evaluate_manual)
-    playbook(trade, df, v)
+    if setup == "fade":
+        playbook(trade, df, v, params or DEFAULT_PARAMS)
+    else:
+        playbook(trade, df, v)
 
     # Build the one-liner context
     if v.action == "exit":
