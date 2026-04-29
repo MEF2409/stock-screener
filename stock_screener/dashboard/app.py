@@ -796,6 +796,62 @@ def render_trades_tab(owner: str):
         unsafe_allow_html=True,
     )
 
+    # ---- Position sizing helper ----
+    with st.expander("📐 Sizing calculator", expanded=False):
+        st.caption(
+            "Risk-based sizing: how many shares to buy/short so a stop-out costs "
+            "no more than X% of the account."
+        )
+        s1, s2, s3 = st.columns(3)
+        with s1:
+            account_size = st.number_input(
+                "Account size ($)", min_value=100.0, value=float(st.session_state.get("acct_size", 10000.0)),
+                step=500.0, format="%.2f", key="acct_size",
+            )
+        with s2:
+            risk_pct = st.number_input(
+                "Risk per trade (%)", min_value=0.1, max_value=10.0,
+                value=float(st.session_state.get("risk_pct", 1.0)),
+                step=0.1, format="%.2f", key="risk_pct",
+            )
+        with s3:
+            sz_side = st.selectbox("Side", ["long", "short"], key="sz_side")
+        e1, e2 = st.columns(2)
+        with e1:
+            sz_entry = st.number_input(
+                "Entry price ($)", min_value=0.01, value=100.00, step=0.01, format="%.2f",
+                key="sz_entry",
+            )
+        with e2:
+            sz_stop = st.number_input(
+                "Stop price ($)", min_value=0.01, value=95.00, step=0.01, format="%.2f",
+                key="sz_stop",
+            )
+        # Compute
+        risk_dollars = account_size * (risk_pct / 100.0)
+        if sz_side == "long":
+            stop_dist = sz_entry - sz_stop
+        else:
+            stop_dist = sz_stop - sz_entry
+
+        if stop_dist <= 0:
+            st.warning(
+                f"Stop must be {'below' if sz_side == 'long' else 'above'} entry for a {sz_side}.",
+            )
+        else:
+            shares = int(risk_dollars / stop_dist)
+            position_dollars = shares * sz_entry
+            stop_pct = stop_dist / sz_entry * 100
+            r1, r2, r3 = st.columns(3)
+            r1.markdown(detail_stat("Shares", f"{shares:,}"), unsafe_allow_html=True)
+            r2.markdown(detail_stat("Position", f"${position_dollars:,.0f}"), unsafe_allow_html=True)
+            r3.markdown(detail_stat("Risk", f"${risk_dollars:,.0f} · {stop_pct:.1f}% stop"), unsafe_allow_html=True)
+            if position_dollars > account_size:
+                st.warning(
+                    f"⚠️ Position ${position_dollars:,.0f} exceeds account ${account_size:,.0f}. "
+                    f"This setup needs more leverage than you have, or a tighter stop."
+                )
+
     # ---- Add trade form ----
     with st.expander("➕ Log a new trade", expanded=False):
         setup_labels = {
