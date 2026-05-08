@@ -68,6 +68,44 @@ def delete_trade(trade_id: int) -> None:
     conn.close()
 
 
+def update_trade(trade_id: int, **fields) -> None:
+    """Patch any subset of trade fields by id. Whitelisted columns only so
+    we never accidentally rewrite owner / id / created_at."""
+    allowed = {
+        "ticker", "side", "entry_date", "entry_price", "shares",
+        "exit_date", "exit_price", "notes", "setup",
+    }
+    sets = []
+    vals = []
+    for k, v in fields.items():
+        if k not in allowed:
+            continue
+        if k == "ticker" and isinstance(v, str):
+            v = v.upper()
+        if k == "side" and isinstance(v, str):
+            v = v.lower()
+            if v not in ("long", "short"):
+                raise ValueError(f"side must be 'long' or 'short', got {v!r}")
+        if k == "setup" and isinstance(v, str):
+            v = v.lower()
+        if k in ("entry_price", "exit_price") and v is not None:
+            v = float(v)
+        if k == "shares" and v is not None:
+            v = int(v)
+        sets.append(f"{k} = ?")
+        vals.append(v)
+    if not sets:
+        return
+    vals.append(trade_id)
+    conn = get_connection()
+    conn.cursor().execute(
+        f"UPDATE trades SET {', '.join(sets)} WHERE id = ?",
+        tuple(vals),
+    )
+    conn.commit()
+    conn.close()
+
+
 def list_trades(owner: str, status: str = "all") -> pd.DataFrame:
     """status: 'open', 'closed', or 'all'."""
     conn = get_connection()

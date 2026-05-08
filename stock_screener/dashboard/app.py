@@ -46,6 +46,7 @@ from stock_screener.auth.users import (
 from stock_screener.trades.trades import (
     add_trade, close_trade, delete_trade as remove_trade,
     list_trades, compute_pnl, grade_closed_trade, setup_edge_stats,
+    update_trade,
 )
 from stock_screener.exits import evaluate_exit, SETUP_CHOICES
 
@@ -1111,6 +1112,118 @@ def _render_portfolio_risk(open_df: pd.DataFrame, account_size: float) -> None:
         )
 
 
+_SETUP_LABELS = {
+    "manual": "Manual / other",
+    "momentum": "Momentum (Runaway Gap)",
+    "reversal": "Reversal (Bullish Div.)",
+    "caution": "Caution (Bearish Div.)",
+    "fade": "Fade (Gap Up + Light Vol)",
+}
+
+
+def _render_trade_edit_form(trade: dict, is_closed: bool) -> None:
+    """Inline form to amend any field on an existing trade. Mostly used to
+    backfill setup tags on trades logged before the setup column existed."""
+    tid = trade["id"]
+    label_to_key = {v: k for k, v in _SETUP_LABELS.items()}
+    current_setup = (trade.get("setup") or "manual").lower()
+    current_label = _SETUP_LABELS.get(current_setup, _SETUP_LABELS["manual"])
+
+    with st.container():
+        st.markdown(
+            f"<div style='background:{SURFACE};border:1px solid {BORDER};"
+            f"border-radius:8px;padding:14px;margin:6px 0 14px 0;'>"
+            f"<div style='color:{ACCENT};font-weight:700;font-size:0.85rem;"
+            f"letter-spacing:0.06em;text-transform:uppercase;margin-bottom:10px;'>"
+            f"Edit Trade · {trade['ticker']}</div>",
+            unsafe_allow_html=True,
+        )
+        with st.form(f"edit_trade_{tid}", clear_on_submit=False):
+            r1, r2, r3 = st.columns(3)
+            with r1:
+                e_ticker = st.text_input(
+                    "Ticker", value=trade["ticker"], key=f"e_ticker_{tid}",
+                ).upper().strip()
+                e_side = st.selectbox(
+                    "Side", ["long", "short"],
+                    index=0 if trade["side"] == "long" else 1,
+                    key=f"e_side_{tid}",
+                )
+                e_setup_label = st.selectbox(
+                    "Setup", list(_SETUP_LABELS.values()),
+                    index=list(_SETUP_LABELS.values()).index(current_label),
+                    key=f"e_setup_{tid}",
+                )
+            with r2:
+                e_entry_date = st.date_input(
+                    "Entry date",
+                    value=pd.to_datetime(trade["entry_date"]).date(),
+                    key=f"e_entry_date_{tid}",
+                )
+                e_entry_price = st.number_input(
+                    "Entry price", min_value=0.01,
+                    value=float(trade["entry_price"]), step=0.01, format="%.2f",
+                    key=f"e_entry_price_{tid}",
+                )
+                e_shares = st.number_input(
+                    "Shares", min_value=1,
+                    value=int(trade["shares"]), step=1,
+                    key=f"e_shares_{tid}",
+                )
+            with r3:
+                if is_closed and trade.get("exit_date"):
+                    e_exit_date = st.date_input(
+                        "Exit date",
+                        value=pd.to_datetime(trade["exit_date"]).date(),
+                        key=f"e_exit_date_{tid}",
+                    )
+                    e_exit_price = st.number_input(
+                        "Exit price", min_value=0.01,
+                        value=float(trade["exit_price"] or 0.01),
+                        step=0.01, format="%.2f",
+                        key=f"e_exit_price_{tid}",
+                    )
+                else:
+                    e_exit_date = None
+                    e_exit_price = None
+                e_notes = st.text_input(
+                    "Notes", value=str(trade.get("notes") or ""),
+                    key=f"e_notes_{tid}",
+                )
+
+            b1, b2 = st.columns([1, 1])
+            with b1:
+                save = st.form_submit_button("Save", type="primary",
+                                             use_container_width=True)
+            with b2:
+                cancel = st.form_submit_button("Cancel",
+                                               use_container_width=True)
+
+            if save:
+                if not e_ticker:
+                    st.error("Ticker required.")
+                else:
+                    fields = {
+                        "ticker": e_ticker, "side": e_side,
+                        "setup": label_to_key[e_setup_label],
+                        "entry_date": e_entry_date.isoformat(),
+                        "entry_price": e_entry_price,
+                        "shares": e_shares,
+                        "notes": e_notes,
+                    }
+                    if is_closed and e_exit_date and e_exit_price:
+                        fields["exit_date"] = e_exit_date.isoformat()
+                        fields["exit_price"] = e_exit_price
+                    update_trade(tid, **fields)
+                    st.session_state["edit_trade_id"] = None
+                    st.success(f"Updated {e_ticker}.")
+                    st.rerun()
+            if cancel:
+                st.session_state["edit_trade_id"] = None
+                st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
+
+
 def _render_trade_replay(trade: dict) -> None:
     """Side-by-side: what the trader did vs what the playbook would have done.
 
@@ -1441,6 +1554,15 @@ def render_trades_tab(owner: str):
                         close_trade(trade["id"], datetime.now().date().isoformat(), new_exit)
                         st.success(f"Closed {trade['ticker']} @ ${new_exit:.2f}")
                         st.rerun()
+                    if st.button("Edit", key=f"edit_btn_open_{trade['id']}", use_container_width=True):
+                        cur = st.session_state.get("edit_trade_id")
+                        st.session_state["edit_trade_id"] = (
+                            None if cur == trade["id"] else trade["id"]
+                        )
+                        st.rerun()
+
+                if st.session_state.get("edit_trade_id") == trade["id"]:
+                    _render_trade_edit_form(trade, is_closed=False)
 
                 if verdict is not None:
                     action_color = {"exit": BEAR, "trim": WARN, "hold": MUTED}.get(verdict.action, MUTED)
@@ -1612,11 +1734,18 @@ def render_trades_tab(owner: str):
                         unsafe_allow_html=True,
                     )
                 with cols[4]:
-                    rcol, dcol = st.columns(2)
+                    rcol, ecol, dcol = st.columns(3)
                     with rcol:
                         if st.button("Replay", key=f"replay_btn_{trade['id']}", use_container_width=True):
                             cur = st.session_state.get("replay_trade_id")
                             st.session_state["replay_trade_id"] = (
+                                None if cur == trade["id"] else trade["id"]
+                            )
+                            st.rerun()
+                    with ecol:
+                        if st.button("Edit", key=f"edit_btn_closed_{trade['id']}", use_container_width=True):
+                            cur = st.session_state.get("edit_trade_id")
+                            st.session_state["edit_trade_id"] = (
                                 None if cur == trade["id"] else trade["id"]
                             )
                             st.rerun()
@@ -1625,8 +1754,12 @@ def render_trades_tab(owner: str):
                             remove_trade(trade["id"])
                             if st.session_state.get("replay_trade_id") == trade["id"]:
                                 st.session_state["replay_trade_id"] = None
+                            if st.session_state.get("edit_trade_id") == trade["id"]:
+                                st.session_state["edit_trade_id"] = None
                             st.rerun()
 
+                if st.session_state.get("edit_trade_id") == trade["id"]:
+                    _render_trade_edit_form(trade, is_closed=True)
                 if st.session_state.get("replay_trade_id") == trade["id"]:
                     _render_trade_replay(trade)
 
