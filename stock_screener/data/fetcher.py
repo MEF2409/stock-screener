@@ -1,11 +1,20 @@
 """Fetch OHLCV data from yfinance and persist to SQLite."""
 
+import time
 import yfinance as yf
 import pandas as pd
 from datetime import datetime, timedelta
 from typing import List
 
 from .db import get_connection
+
+
+# Yahoo throttles after a few hundred sequential yf.download calls. The
+# first symptom is empty DataFrames returned silently — every ticker comes
+# back as "possibly delisted; no price data found" until the limit clears.
+# We retry with exponential backoff and treat empty as a transient error.
+_MAX_ATTEMPTS = 4
+_BASE_SLEEP = 1.5  # seconds; doubles each retry
 
 
 def fetch_ohlcv(ticker: str, start_date: str, end_date: str) -> pd.DataFrame:
@@ -20,20 +29,37 @@ def fetch_ohlcv(ticker: str, start_date: str, end_date: str) -> pd.DataFrame:
     Returns:
         DataFrame with columns: Open, High, Low, Close, Volume
     """
-    df = yf.download(ticker, start=start_date, end=end_date, progress=False, auto_adjust=True)
-    if df.empty:
-        return df
-    # yfinance returns a MultiIndex on columns when given a single ticker
-    # (e.g. ('Open', 'ABT')). Flatten by dropping the ticker level so we can
-    # select by name. Positional rename is unsafe because yfinance's column
-    # order changed to alphabetical (Close, High, Low, Open, Volume), which
-    # silently swapped Open/Close in every fetch.
-    if isinstance(df.columns, pd.MultiIndex):
-        df.columns = df.columns.get_level_values(0)
-    df = df.reset_index()
-    df = df[['Date', 'Open', 'High', 'Low', 'Close', 'Volume']]
-    df['Date'] = pd.to_datetime(df['Date']).dt.strftime('%Y-%m-%d')
-    return df
+    last_err: Exception | None = None
+    for attempt in range(_MAX_ATTEMPTS):
+        try:
+            df = yf.download(
+                ticker, start=start_date, end=end_date,
+                progress=False, auto_adjust=True, threads=False,
+            )
+        except Exception as exc:  # transient network / json / cookie failures
+            last_err = exc
+            df = pd.DataFrame()
+
+        if not df.empty:
+            # yfinance returns a MultiIndex on columns when given a single
+            # ticker (e.g. ('Open', 'ABT')). Flatten by dropping the ticker
+            # level so we can select by name. Positional rename is unsafe —
+            # yfinance's column order changed to alphabetical (Close, High,
+            # Low, Open, Volume), which silently swapped Open/Close.
+            if isinstance(df.columns, pd.MultiIndex):
+                df.columns = df.columns.get_level_values(0)
+            df = df.reset_index()
+            df = df[['Date', 'Open', 'High', 'Low', 'Close', 'Volume']]
+            df['Date'] = pd.to_datetime(df['Date']).dt.strftime('%Y-%m-%d')
+            return df
+
+        # Empty result — back off and retry. Don't sleep after the last
+        # attempt; just let the caller treat it as no-data.
+        if attempt < _MAX_ATTEMPTS - 1:
+            time.sleep(_BASE_SLEEP * (2 ** attempt))
+
+    # Ran out of retries; return whatever yfinance gave us (empty df).
+    return pd.DataFrame()
 
 
 def store_ohlcv(ticker: str, df: pd.DataFrame) -> None:
