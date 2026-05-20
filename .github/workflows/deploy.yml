@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     concurrency: deploy-fly
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: superfly/flyctl-actions/setup-flyctl@master
       # Build on the GitHub runner (reliable PyPI) and push to Fly's registry.
       # --remote-only would defer the build to Fly/Depot's builder, which has
