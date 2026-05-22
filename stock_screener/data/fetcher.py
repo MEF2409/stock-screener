@@ -62,6 +62,69 @@ def fetch_ohlcv(ticker: str, start_date: str, end_date: str) -> pd.DataFrame:
     return pd.DataFrame()
 
 
+def fetch_ohlcv_bulk(tickers: list[str], start_date: str, end_date: str,
+                     chunk_size: int = 200) -> dict[str, pd.DataFrame]:
+    """Fetch OHLCV for many tickers in chunked bulk requests.
+
+    Single-ticker yf.download per name is ~0.5s and adds up to 15-30 min
+    for the full universe — past the SSH session timeout used by the
+    morning cron workflows. Bulk multi-ticker download collapses each
+    chunk into one API call.
+
+    Returns a dict {ticker: dataframe with Date/Open/High/Low/Close/Volume}.
+    Tickers Yahoo returned no data for simply don't appear in the dict.
+    """
+    out: dict[str, pd.DataFrame] = {}
+    if not tickers:
+        return out
+
+    for i in range(0, len(tickers), chunk_size):
+        chunk = tickers[i:i + chunk_size]
+        last_err: Exception | None = None
+        bulk: pd.DataFrame | None = None
+        for attempt in range(_MAX_ATTEMPTS):
+            try:
+                bulk = yf.download(
+                    tickers=chunk, start=start_date, end=end_date,
+                    progress=False, auto_adjust=True, threads=True,
+                    group_by="ticker",
+                )
+            except Exception as exc:
+                last_err = exc
+                bulk = None
+            if bulk is not None and not bulk.empty:
+                break
+            if attempt < _MAX_ATTEMPTS - 1:
+                time.sleep(_BASE_SLEEP * (2 ** attempt))
+
+        if bulk is None or bulk.empty:
+            continue
+
+        # Bulk returns a column-MultiIndex (ticker, field) when len(chunk)>1;
+        # a flat single-ticker frame when len(chunk)==1. Normalize both.
+        if isinstance(bulk.columns, pd.MultiIndex):
+            for ticker in chunk:
+                if ticker not in bulk.columns.get_level_values(0):
+                    continue
+                tdf = bulk[ticker].dropna(how="all").reset_index()
+                if tdf.empty or "Open" not in tdf.columns:
+                    continue
+                tdf = tdf[["Date", "Open", "High", "Low", "Close", "Volume"]]
+                tdf["Date"] = pd.to_datetime(tdf["Date"]).dt.strftime("%Y-%m-%d")
+                if not tdf.dropna().empty:
+                    out[ticker] = tdf
+        else:
+            # Single-ticker chunk fallback
+            tdf = bulk.dropna(how="all").reset_index()
+            if "Open" not in tdf.columns:
+                continue
+            tdf = tdf[["Date", "Open", "High", "Low", "Close", "Volume"]]
+            tdf["Date"] = pd.to_datetime(tdf["Date"]).dt.strftime("%Y-%m-%d")
+            out[chunk[0]] = tdf
+
+    return out
+
+
 def store_ohlcv(ticker: str, df: pd.DataFrame) -> None:
     """
     Store OHLCV data in SQLite. Replaces existing data for the ticker/date pairs.

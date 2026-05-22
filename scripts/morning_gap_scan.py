@@ -20,7 +20,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from stock_screener.data.db import init_db, get_connection
-from stock_screener.data.fetcher import fetch_ohlcv, store_ohlcv, get_ohlcv
+from stock_screener.data.fetcher import fetch_ohlcv_bulk, store_ohlcv, get_ohlcv
 from stock_screener.universe.builder import get_universe
 from stock_screener.earnings.earnings import had_earnings_within_past_days
 from stock_screener.alerts.notifier import send_all
@@ -33,17 +33,15 @@ def refresh_today_ohlcv(tickers: list[str]) -> int:
     today = datetime.now().date()
     start = (today - timedelta(days=5)).isoformat()
     end = (today + timedelta(days=1)).isoformat()
+    bulk = fetch_ohlcv_bulk(tickers, start, end, chunk_size=200)
     success = 0
-    for i, ticker in enumerate(tickers):
-        if (i + 1) % 250 == 0:
-            print(f"  refresh {i + 1}/{len(tickers)} success={success}")
+    for ticker, df in bulk.items():
         try:
-            df = fetch_ohlcv(ticker, start, end)
-            if not df.empty:
-                store_ohlcv(ticker, df)
-                success += 1
+            store_ohlcv(ticker, df)
+            success += 1
         except Exception:
             continue
+    print(f"  bulk-fetched {len(bulk)}/{len(tickers)} tickers; stored {success}")
     return success
 
 

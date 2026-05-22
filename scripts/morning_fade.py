@@ -27,32 +27,32 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from stock_screener.data.db import init_db, get_connection
-from stock_screener.data.fetcher import fetch_ohlcv, store_ohlcv
+from stock_screener.data.fetcher import fetch_ohlcv_bulk, store_ohlcv
 from stock_screener.universe.builder import get_universe
 from stock_screener.scanners.scanners import scan_gap_up_normal_volume
 from stock_screener.alerts.notifier import send_all
 
 
 def refresh_today_ohlcv(tickers: list[str]) -> int:
-    """Fetch today's bar for each ticker and upsert. Returns success count."""
+    """Bulk-fetch today's bar (with a few days of context for gap math) for
+    every ticker in one batched call and upsert. Returns success count."""
     today = datetime.now().date()
     start = (today - timedelta(days=5)).isoformat()
-    # yfinance treats `end` as exclusive — bump to tomorrow so today's in-progress
-    # bar is returned. Without this, the latest bar in the DB is yesterday's,
-    # and the Fade scanner ends up comparing yesterday's open vs. the prior day's
-    # close (a stale, 1-day-old gap check).
+    # yfinance treats `end` as exclusive — bump to tomorrow so today's
+    # in-progress bar is returned. Without this, the latest bar in the DB
+    # is yesterday's, and the Fade scanner compares yesterday's open vs.
+    # the prior day's close (a stale, 1-day-old gap check).
     end = (today + timedelta(days=1)).isoformat()
+
+    bulk = fetch_ohlcv_bulk(tickers, start, end, chunk_size=200)
     success = 0
-    for i, ticker in enumerate(tickers):
-        if (i + 1) % 25 == 0:
-            print(f"  refresh: {i + 1}/{len(tickers)} (success {success})")
+    for ticker, df in bulk.items():
         try:
-            df = fetch_ohlcv(ticker, start, end)
-            if not df.empty:
-                store_ohlcv(ticker, df)
-                success += 1
+            store_ohlcv(ticker, df)
+            success += 1
         except Exception:
             continue
+    print(f"  bulk-fetched {len(bulk)}/{len(tickers)} tickers; stored {success}")
     return success
 
 
