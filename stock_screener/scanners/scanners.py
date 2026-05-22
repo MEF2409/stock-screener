@@ -48,7 +48,22 @@ def _apply_universal_filters(ticker: str, is_flagged: bool) -> bool:
     return True
 
 
-def scan_runaway_gap(ticker: str) -> dict:
+def _prep(ticker: str, df, min_len: int):
+    """Shared loader: fetch + enrich once, or reuse a pre-enriched df.
+    Returns (df, None) on success or (None, error_result) on insufficient data.
+    Passing a pre-enriched df (from run_all_scanners) avoids re-reading the DB
+    and recomputing indicators four times per ticker."""
+    if df is None:
+        df = get_ohlcv(ticker)
+        if len(df) < min_len:
+            return None, {"ticker": ticker, "flagged": False, "reason": "Insufficient data"}
+        df = enrich_ohlcv_with_indicators(df)
+    elif len(df) < min_len:
+        return None, {"ticker": ticker, "flagged": False, "reason": "Insufficient data"}
+    return df, None
+
+
+def scan_runaway_gap(ticker: str, df=None) -> dict:
     """
     Bull #1 — Runaway Gap
 
@@ -57,11 +72,9 @@ def scan_runaway_gap(ticker: str) -> dict:
     - Today's volume >= 1.3 × 30-day average daily volume
     """
     try:
-        df = get_ohlcv(ticker)
-        if len(df) < 2:
-            return {"ticker": ticker, "flagged": False, "reason": "Insufficient data"}
-
-        df = enrich_ohlcv_with_indicators(df)
+        df, err = _prep(ticker, df, 2)
+        if err:
+            return err
 
         today = df.iloc[-1]
         yesterday = df.iloc[-2]
@@ -92,7 +105,7 @@ def scan_runaway_gap(ticker: str) -> dict:
         return {"ticker": ticker, "flagged": False, "reason": f"Error: {str(e)}"}
 
 
-def scan_bullish_divergence(ticker: str) -> dict:
+def scan_bullish_divergence(ticker: str, df=None) -> dict:
     """
     Bull #2 — Bullish Divergence
 
@@ -101,11 +114,9 @@ def scan_bullish_divergence(ticker: str) -> dict:
     - Today's 14-day RSI > RSI on the date of the previous 52-week low
     """
     try:
-        df = get_ohlcv(ticker)
-        if len(df) < 250:  # Need ~1 year for 52-week data
-            return {"ticker": ticker, "flagged": False, "reason": "Insufficient data"}
-
-        df = enrich_ohlcv_with_indicators(df)
+        df, err = _prep(ticker, df, 250)  # Need ~1 year for 52-week data
+        if err:
+            return err
 
         today = df.iloc[-1]
         today_low = today["Low"]
@@ -154,7 +165,7 @@ def scan_bullish_divergence(ticker: str) -> dict:
         return {"ticker": ticker, "flagged": False, "reason": f"Error: {str(e)}"}
 
 
-def scan_bearish_divergence(ticker: str) -> dict:
+def scan_bearish_divergence(ticker: str, df=None) -> dict:
     """
     Bear #1 — Bearish Divergence
 
@@ -163,11 +174,9 @@ def scan_bearish_divergence(ticker: str) -> dict:
     - Today's 14-day RSI < RSI on the date of the previous 52-week high
     """
     try:
-        df = get_ohlcv(ticker)
-        if len(df) < 250:
-            return {"ticker": ticker, "flagged": False, "reason": "Insufficient data"}
-
-        df = enrich_ohlcv_with_indicators(df)
+        df, err = _prep(ticker, df, 250)
+        if err:
+            return err
 
         today = df.iloc[-1]
         today_high = today["High"]
@@ -216,7 +225,7 @@ def scan_bearish_divergence(ticker: str) -> dict:
         return {"ticker": ticker, "flagged": False, "reason": f"Error: {str(e)}"}
 
 
-def scan_gap_up_normal_volume(ticker: str) -> dict:
+def scan_gap_up_normal_volume(ticker: str, df=None) -> dict:
     """
     Bear #2 — Gap Up on Normal Volume
 
@@ -226,11 +235,9 @@ def scan_gap_up_normal_volume(ticker: str) -> dict:
     - Today's open is below the 50-day, 100-day, AND 200-day moving averages
     """
     try:
-        df = get_ohlcv(ticker)
-        if len(df) < 2:
-            return {"ticker": ticker, "flagged": False, "reason": "Insufficient data"}
-
-        df = enrich_ohlcv_with_indicators(df)
+        df, err = _prep(ticker, df, 2)
+        if err:
+            return err
 
         today = df.iloc[-1]
         yesterday = df.iloc[-2]
@@ -289,19 +296,28 @@ def run_all_scanners(tickers: list) -> dict:
     }
 
     for ticker in tickers:
-        result = scan_runaway_gap(ticker)
+        # Read OHLCV and compute indicators ONCE per ticker, then hand the
+        # enriched frame to all four scanners. Previously each scanner
+        # re-read the DB and recomputed RSI/MAs independently — 4× the work
+        # per ticker, which made the full-universe pass time out.
+        df = get_ohlcv(ticker)
+        if len(df) < 2:
+            continue
+        df = enrich_ohlcv_with_indicators(df)
+
+        result = scan_runaway_gap(ticker, df=df)
         if result["flagged"]:
             results["runaway_gap"].append(result)
 
-        result = scan_bullish_divergence(ticker)
+        result = scan_bullish_divergence(ticker, df=df)
         if result["flagged"]:
             results["bullish_div"].append(result)
 
-        result = scan_bearish_divergence(ticker)
+        result = scan_bearish_divergence(ticker, df=df)
         if result["flagged"]:
             results["bearish_div"].append(result)
 
-        result = scan_gap_up_normal_volume(ticker)
+        result = scan_gap_up_normal_volume(ticker, df=df)
         if result["flagged"]:
             results["gap_up_normal_vol"].append(result)
 
