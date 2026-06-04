@@ -281,13 +281,19 @@ def scan_gap_up_normal_volume(ticker: str, df=None) -> dict:
         return {"ticker": ticker, "flagged": False, "reason": f"Error: {str(e)}"}
 
 
-def run_all_scanners(tickers: list) -> dict:
+def run_all_scanners(tickers: list, progress_every: int = 200) -> dict:
     """
     Run all four scanners against a list of tickers.
 
     Returns a dict with keys: runaway_gap, bullish_div, bearish_div, gap_up_normal_vol
     Each contains a list of flagged stocks.
+
+    `progress_every` controls heartbeat output to stdout. The daily-refresh
+    cron pipes us over `flyctl ssh console`, whose tunnel has a ~5 min idle
+    timeout — a silent scan over 2k tickers was killing the session. Printing
+    every N tickers keeps the tunnel warm.
     """
+    import sys
     results = {
         "runaway_gap": [],
         "bullish_div": [],
@@ -295,13 +301,21 @@ def run_all_scanners(tickers: list) -> dict:
         "gap_up_normal_vol": [],
     }
 
-    for ticker in tickers:
+    total = len(tickers)
+    for i, ticker in enumerate(tickers):
         # Read OHLCV and compute indicators ONCE per ticker, then hand the
         # enriched frame to all four scanners. Previously each scanner
         # re-read the DB and recomputed RSI/MAs independently — 4× the work
         # per ticker, which made the full-universe pass time out.
         df = get_ohlcv(ticker)
         if len(df) < 2:
+            if progress_every and (i + 1) % progress_every == 0:
+                print(f"  scanner: {i + 1}/{total} "
+                      f"(flags: rg={len(results['runaway_gap'])} "
+                      f"bd={len(results['bullish_div'])} "
+                      f"bz={len(results['bearish_div'])} "
+                      f"fd={len(results['gap_up_normal_vol'])})",
+                      flush=True)
             continue
         df = enrich_ohlcv_with_indicators(df)
 
@@ -321,4 +335,13 @@ def run_all_scanners(tickers: list) -> dict:
         if result["flagged"]:
             results["gap_up_normal_vol"].append(result)
 
+        if progress_every and (i + 1) % progress_every == 0:
+            print(f"  scanner: {i + 1}/{total} "
+                  f"(flags: rg={len(results['runaway_gap'])} "
+                  f"bd={len(results['bullish_div'])} "
+                  f"bz={len(results['bearish_div'])} "
+                  f"fd={len(results['gap_up_normal_vol'])})",
+                  flush=True)
+
+    sys.stdout.flush()
     return results
