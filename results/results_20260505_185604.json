@@ -1,0 +1,1295 @@
+{
+  "runaway_gap": [
+    {
+      "ticker": "ACDC",
+      "reason": "Runaway Gap",
+      "date": "2026-04-29"
+    },
+    {
+      "ticker": "ADM",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "ADVB",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "AEIS",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "AGH",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "AGRO",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "ALKT",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "ALMU",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "ALNY",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "AMKR",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "ARDX",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "ASAN",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "AUR",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "AVT",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "AXSM",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "BB",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "BKKT",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "BRBR",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "BTGO",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "CADL",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "CART",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "CC",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "CECO",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "CELC",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "CEPT",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "CGEM",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "CGNX",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "CLBT",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "CLNN",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "CLX",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "CMBT",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "CMPS",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "CNK",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "CNSP",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "COHU",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "CRCL",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "CRML",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "CTLP",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "CWK",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "DDOG",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "DGXX",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "DINO",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "DLB",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "DVA",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "DXYZ",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "EBAY",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "ECG",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "EFOR",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "ELPW",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "ENTG",
+      "reason": "Runaway Gap",
+      "date": "2026-04-29"
+    },
+    {
+      "ticker": "EQPT",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "ET",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "ETN",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "EVER",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "EXTR",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "FLGT",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "FN",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "FSLR",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "FTRE",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "GBTG",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "GCT",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "GFS",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "GSIT",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "HNGE",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "HTCO",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "ICHR",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "INDV",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "INSP",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "LOGI",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "LSCC",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "LWLG",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "MMSI",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "MRLN",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "NBIS",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "NPKI",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "NSP",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "NTGR",
+      "reason": "Runaway Gap",
+      "date": "2026-04-29"
+    },
+    {
+      "ticker": "OI",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "OLED",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "ON",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "ONEG",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "OUST",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "PATH",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "PDYN",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "PENG",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "PLTR",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "PN",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "POWI",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "POWL",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "PURR",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "QCOM",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "REAL",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "RIVN",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "ROKU",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "RYAN",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "SHAK",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "SKK",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "SMMT",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "SNDX",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "STGW",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "STRL",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "STX",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "SYNA",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "TDC",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "TDOC",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "TFSL",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "TKR",
+      "reason": "Runaway Gap",
+      "date": "2026-04-29"
+    },
+    {
+      "ticker": "TTMI",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "UPWK",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "VNDA",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "VRNS",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "VSH",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "WDC",
+      "reason": "Runaway Gap",
+      "date": "2026-04-29"
+    },
+    {
+      "ticker": "WYFI",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "XNCR",
+      "reason": "Runaway Gap",
+      "date": "2026-05-04"
+    }
+  ],
+  "bullish_div": [
+    {
+      "ticker": "AMCR",
+      "reason": "Bullish Divergence",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "BBY",
+      "reason": "Bullish Divergence",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "BRO",
+      "reason": "Bullish Divergence",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "BYRN",
+      "reason": "Bullish Divergence",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "CCOI",
+      "reason": "Bullish Divergence",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "LKQ",
+      "reason": "Bullish Divergence",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "MMSI",
+      "reason": "Bullish Divergence",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "NOMD",
+      "reason": "Bullish Divergence",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "TXRH",
+      "reason": "Bullish Divergence",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "WEN",
+      "reason": "Bullish Divergence",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "ZTS",
+      "reason": "Bullish Divergence",
+      "date": "2026-05-04"
+    }
+  ],
+  "bearish_div": [
+    {
+      "ticker": "ACHC",
+      "reason": "Bearish Divergence",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "ADEA",
+      "reason": "Bearish Divergence",
+      "date": "2026-04-29"
+    },
+    {
+      "ticker": "AESI",
+      "reason": "Bearish Divergence",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "AHCO",
+      "reason": "Bearish Divergence",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "AMZN",
+      "reason": "Bearish Divergence",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "AROC",
+      "reason": "Bearish Divergence",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "AURA",
+      "reason": "Bearish Divergence",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "BAND",
+      "reason": "Bearish Divergence",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "BB",
+      "reason": "Bearish Divergence",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "BBDC",
+      "reason": "Bearish Divergence",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "BE",
+      "reason": "Bearish Divergence",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "CC",
+      "reason": "Bearish Divergence",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "CEVA",
+      "reason": "Bearish Divergence",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "CHRD",
+      "reason": "Bearish Divergence",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "CTOS",
+      "reason": "Bearish Divergence",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "CVV",
+      "reason": "Bearish Divergence",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "EBAY",
+      "reason": "Bearish Divergence",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "ECG",
+      "reason": "Bearish Divergence",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "EFXT",
+      "reason": "Bearish Divergence",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "GFS",
+      "reason": "Bearish Divergence",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "GOOG",
+      "reason": "Bearish Divergence",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "GOOGL",
+      "reason": "Bearish Divergence",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "IHRT",
+      "reason": "Bearish Divergence",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "JAZZ",
+      "reason": "Bearish Divergence",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "LAMR",
+      "reason": "Bearish Divergence",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "LSCC",
+      "reason": "Bearish Divergence",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "LWLG",
+      "reason": "Bearish Divergence",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "MTSI",
+      "reason": "Bearish Divergence",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "MU",
+      "reason": "Bearish Divergence",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "NBIS",
+      "reason": "Bearish Divergence",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "NXPI",
+      "reason": "Bearish Divergence",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "ON",
+      "reason": "Bearish Divergence",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "OPLN",
+      "reason": "Bearish Divergence",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "OUT",
+      "reason": "Bearish Divergence",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "PENG",
+      "reason": "Bearish Divergence",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "PNW",
+      "reason": "Bearish Divergence",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "POWL",
+      "reason": "Bearish Divergence",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "ROKU",
+      "reason": "Bearish Divergence",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "SGML",
+      "reason": "Bearish Divergence",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "STM",
+      "reason": "Bearish Divergence",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "STRL",
+      "reason": "Bearish Divergence",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "STX",
+      "reason": "Bearish Divergence",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "SWBI",
+      "reason": "Bearish Divergence",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "TALK",
+      "reason": "Bearish Divergence",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "TFSL",
+      "reason": "Bearish Divergence",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "TRIN",
+      "reason": "Bearish Divergence",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "TVTX",
+      "reason": "Bearish Divergence",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "VRT",
+      "reason": "Bearish Divergence",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "VTR",
+      "reason": "Bearish Divergence",
+      "date": "2026-04-29"
+    },
+    {
+      "ticker": "WDC",
+      "reason": "Bearish Divergence",
+      "date": "2026-04-29"
+    }
+  ],
+  "gap_up_normal_vol": [
+    {
+      "ticker": "ACN",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "AMCR",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "APPN",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "AVAV",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "AXON",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "AXTA",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "BBAR",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "BILL",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "BKNG",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "BMI",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "BSX",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "BSY",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "BTU",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "CAG",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "CCC",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "CERT",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "CHTR",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "CHWY",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "CMG",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "CNH",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "CNXC",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "CPRT",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "CR",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "CRK",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "CRM",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "CRSP",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "CSGP",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "CTSH",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "DG",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "DXCM",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "EPAM",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "ESTC",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "EXE",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "FMC",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "GDYN",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "GLOB",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "GPGI",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "GWRE",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "HMC",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "HMY",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "HNRG",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "HOOD",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "INSM",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "INTR",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "INTU",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "KTOS",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "LENZ",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "NOW",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "NRG",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-04-29"
+    },
+    {
+      "ticker": "ODD",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "PAR",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "PEGA",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "PHG",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "PHR",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "PTCT",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "ROL",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "RTX",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "RUN",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "SAIL",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "SAP",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "SGI",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "SIBN",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "SITE",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "SMCI",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "SNOW",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "SOFI",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "SRAD",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-04-29"
+    },
+    {
+      "ticker": "STLA",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "STNE",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "TEL",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "TTAN",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "TW",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "TXRH",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "VCYT",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "VKTX",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "VST",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "VTS",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-04-29"
+    },
+    {
+      "ticker": "W",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "WEX",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "ZBIO",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    },
+    {
+      "ticker": "ZS",
+      "reason": "Gap Up Normal Volume (short candidate)",
+      "date": "2026-05-04"
+    }
+  ]
+}
