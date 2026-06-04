@@ -74,10 +74,16 @@ def main():
 
     print(f"\n2. Running Fade scanner...")
     flagged = []
-    for ticker in tickers:
+    total = len(tickers)
+    for i, ticker in enumerate(tickers):
         r = scan_gap_up_normal_volume(ticker)
         if r["flagged"]:
             flagged.append(r)
+        # Heartbeat keeps the flyctl ssh tunnel from idle-timing-out
+        # at ~5 min on the silent scanner pass.
+        if (i + 1) % 250 == 0:
+            print(f"  scanner: {i + 1}/{total} (flagged so far: {len(flagged)})",
+                  flush=True)
     print(f"   ✓ {len(flagged)} Fade candidates")
 
     # Reuse the same alert formatter — pass {fade scanner only}

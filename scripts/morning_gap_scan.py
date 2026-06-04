@@ -47,7 +47,8 @@ def refresh_today_ohlcv(tickers: list[str]) -> int:
 
 def find_gappers(tickers: list[str]) -> list[dict]:
     gappers = []
-    for ticker in tickers:
+    total = len(tickers)
+    for i, ticker in enumerate(tickers):
         try:
             df = get_ohlcv(ticker)
             if len(df) < 2:
@@ -70,7 +71,11 @@ def find_gappers(tickers: list[str]) -> list[dict]:
                 "catalyst": "earnings" if had_earnings_within_past_days(ticker, days=2) else "none",
             })
         except Exception:
-            continue
+            pass
+        # Heartbeat keeps the flyctl ssh tunnel alive on the silent pass.
+        if (i + 1) % 250 == 0:
+            print(f"  scan: {i + 1}/{total} (gappers so far: {len(gappers)})",
+                  flush=True)
     gappers.sort(key=lambda r: abs(r["gap_pct"]), reverse=True)
     return gappers
 
