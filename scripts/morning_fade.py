@@ -28,6 +28,7 @@ sys.path.insert(0, str(project_root))
 
 from stock_screener.data.db import init_db, get_connection
 from stock_screener.data.fetcher import fetch_ohlcv_bulk, store_ohlcv
+from stock_screener.jobs import record_run
 from stock_screener.universe.builder import get_universe
 from stock_screener.scanners.scanners import scan_gap_up_normal_volume
 from stock_screener.alerts.notifier import send_all
@@ -122,4 +123,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    import os
+    triggered_by = os.environ.get("JOB_TRIGGERED_BY", "cron")
+    with record_run("morning_fade", triggered_by=triggered_by):
+        main()

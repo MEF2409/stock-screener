@@ -24,6 +24,7 @@ from stock_screener.universe.builder import get_universe, update_universe
 from stock_screener.scanners.scanners import run_all_scanners
 from stock_screener.earnings.earnings import update_earnings_calendar
 from stock_screener.alerts.notifier import send_all
+from stock_screener.jobs import record_run
 
 
 def write_scan_history(results: dict) -> None:
@@ -230,4 +231,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    import os
+    triggered_by = os.environ.get("JOB_TRIGGERED_BY", "cron")
+    with record_run("daily_refresh", triggered_by=triggered_by):
+        main()

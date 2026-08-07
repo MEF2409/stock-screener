@@ -49,6 +49,13 @@ from stock_screener.trades.trades import (
     update_trade,
 )
 from stock_screener.exits import evaluate_exit, SETUP_CHOICES
+from stock_screener.jobs import (
+    JOBS,
+    launch_job,
+    is_job_running,
+    latest_run_per_job,
+    read_log_tail,
+)
 
 
 # Bloomberg-terminal-style palette
@@ -2850,6 +2857,135 @@ def _render_admin_panel():
                         st.rerun()
 
 
+def _fmt_ago(ts_str: str | None) -> str:
+    """Compact 'X min ago' / 'Xh ago' / 'Xd ago' from a UTC timestamp string.
+    Returns 'never' if ts_str is None."""
+    if not ts_str:
+        return "never"
+    from datetime import datetime as _dt
+    try:
+        started = _dt.strptime(ts_str, "%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        return ts_str
+    delta = _dt.utcnow() - started
+    secs = int(delta.total_seconds())
+    if secs < 60:
+        return f"{secs}s ago"
+    if secs < 3600:
+        return f"{secs // 60}m ago"
+    if secs < 86400:
+        return f"{secs // 3600}h ago"
+    return f"{secs // 86400}d ago"
+
+
+# Freshness ceilings per job — after this many seconds since the last
+# successful run, the panel dot flips from green to yellow ("stale").
+# Set slightly wider than the cron cadence so a run that lands late
+# doesn't panic the dot.
+_STALE_THRESHOLDS_SEC = {
+    "daily_refresh": 36 * 3600,      # runs weekdays; 36h covers a weekend
+    "morning_fade": 30 * 3600,        # runs weekday mornings
+    "morning_gap_scan": 30 * 3600,
+}
+
+
+def _job_dot(run_row: dict | None, job_name: str) -> tuple[str, str]:
+    """Return (color, label) for a job's health dot."""
+    if run_row is None:
+        return BEAR, "never run"
+    status = run_row["status"]
+    if status == "running":
+        return ACCENT, "running"
+    if status == "failed":
+        return BEAR, "failed"
+    # success — check freshness
+    from datetime import datetime as _dt
+    try:
+        started = _dt.strptime(run_row["started_at"], "%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        return BULL, "ok"
+    age = (_dt.utcnow() - started).total_seconds()
+    if age > _STALE_THRESHOLDS_SEC.get(job_name, 36 * 3600):
+        return WARN, "stale"
+    return BULL, "ok"
+
+
+def _render_data_health_panel():
+    """Sidebar panel: one row per job showing last-run status + a
+    'Run now' button. Reads job_runs, launches via jobs.launcher."""
+    st.markdown('<div class="mp-section-label">Data Health</div>', unsafe_allow_html=True)
+
+    latest = latest_run_per_job()
+    any_running = False
+
+    for job in JOBS:
+        row = latest.get(job.name)
+        color, status_label = _job_dot(row, job.name)
+        running = status_label == "running"
+        any_running = any_running or running
+        ago = _fmt_ago(row["started_at"] if row else None)
+        triggered = row.get("triggered_by") if row else None
+        trig_chip = f" · {triggered}" if triggered and triggered != "cron" else ""
+
+        # Card
+        st.markdown(
+            f'<div style="background:{SURFACE};border:1px solid {BORDER};border-radius:8px;'
+            f'padding:8px 10px;margin-bottom:6px;">'
+            f'<div style="display:flex;align-items:center;gap:8px;">'
+            f'<span style="width:8px;height:8px;border-radius:50%;background:{color};'
+            f'display:inline-block;box-shadow:0 0 6px {color}80;"></span>'
+            f'<span style="font-family:JetBrains Mono,monospace;font-size:0.82rem;color:{TEXT};'
+            f'font-weight:600;">{job.label}</span>'
+            f'<span style="margin-left:auto;font-family:JetBrains Mono,monospace;font-size:0.7rem;'
+            f'color:{MUTED};">{ago}{trig_chip}</span>'
+            f'</div>'
+            f'<div style="font-family:JetBrains Mono,monospace;font-size:0.68rem;color:{MUTED};'
+            f'margin-top:2px;">status: <span style="color:{color};">{status_label}</span></div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+        btn_cols = st.columns([2, 1])
+        with btn_cols[0]:
+            btn_label = "▶ Run now" if not running else "…running"
+            if st.button(btn_label, key=f"run_job_{job.name}",
+                         use_container_width=True, disabled=running):
+                ok, msg = launch_job(job.name, triggered_by="manual")
+                if ok:
+                    st.success(msg)
+                else:
+                    st.warning(msg)
+                st.rerun()
+        with btn_cols[1]:
+            if row and row.get("log_path"):
+                if st.button("📄", key=f"log_job_{job.name}",
+                             help="Show recent log", use_container_width=True):
+                    st.session_state[f"show_log_{job.name}"] = not st.session_state.get(
+                        f"show_log_{job.name}", False
+                    )
+
+        if st.session_state.get(f"show_log_{job.name}") and row and row.get("log_path"):
+            log_text = read_log_tail(row["log_path"], max_bytes=4000) or "(log empty or missing)"
+            st.code(log_text, language="text")
+
+        if row and row["status"] == "failed" and row.get("message"):
+            # Show a compact error preview — first line of the traceback
+            err_line = row["message"].strip().splitlines()[-1] if row["message"] else ""
+            st.markdown(
+                f'<div style="font-family:JetBrains Mono,monospace;font-size:0.68rem;'
+                f'color:{BEAR};padding:2px 4px;margin:-4px 0 8px 0;">{err_line[:120]}</div>',
+                unsafe_allow_html=True,
+            )
+
+    # If anything's running, auto-refresh every 8s so the user sees
+    # 'running → success' without clicking anything.
+    if any_running:
+        st.caption("Auto-refreshing while a job runs…")
+        import time
+        time.sleep(8)
+        st.rerun()
+
+
 def main():
     st.set_page_config(page_title="Market Pulse", layout="wide", initial_sidebar_state="expanded")
     inject_css()
@@ -2907,6 +3043,9 @@ def main():
                 f'</div>',
                 unsafe_allow_html=True,
             )
+
+        # Data Health — job run status + manual triggers.
+        _render_data_health_panel()
 
         st.markdown('<div class="mp-section-label">Data</div>', unsafe_allow_html=True)
         if st.button("🔄 Update Universe", use_container_width=True):

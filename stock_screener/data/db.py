@@ -147,6 +147,24 @@ def init_db() -> None:
     if "setup" not in trade_cols:
         cursor.execute("ALTER TABLE trades ADD COLUMN setup TEXT NOT NULL DEFAULT 'manual'")
 
+    # Job runs — one row per script execution (cron or manual). Powers the
+    # 'Data Health' dashboard panel. status is 'running' | 'success' |
+    # 'failed'; message holds the error trace on failure.
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS job_runs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            job_name TEXT NOT NULL,
+            started_at TEXT NOT NULL,
+            finished_at TEXT,
+            status TEXT NOT NULL,
+            triggered_by TEXT NOT NULL DEFAULT 'cron',
+            message TEXT,
+            log_path TEXT,
+            pid INTEGER
+        )
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_job_runs_job_started ON job_runs(job_name, started_at DESC)")
+
     conn.commit()
     conn.close()
 
