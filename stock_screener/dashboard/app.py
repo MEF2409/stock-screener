@@ -2979,11 +2979,22 @@ def _render_data_health_panel():
 
     # If anything's running, auto-refresh every 8s so the user sees
     # 'running → success' without clicking anything.
+    #
+    # Do the refresh in the BROWSER, not on the Python side. A python
+    # `time.sleep(8) + st.rerun()` would freeze the entire Streamlit
+    # session for 8s at a stretch — and since the panel re-renders and
+    # sleeps again, the page stays unresponsive for the full duration
+    # of a long-running job (e.g. the 5-15 min daily refresh). Using
+    # window.parent.location.reload() means Python returns
+    # immediately and the browser reloads itself on a timer, so the
+    # rest of the page (tabs, buttons, forms) stays fully interactive.
     if any_running:
         st.caption("Auto-refreshing while a job runs…")
-        import time
-        time.sleep(8)
-        st.rerun()
+        import streamlit.components.v1 as _components
+        _components.html(
+            "<script>setTimeout(function(){window.parent.location.reload();}, 8000);</script>",
+            height=0,
+        )
 
 
 def main():
