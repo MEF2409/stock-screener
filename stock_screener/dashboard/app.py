@@ -58,6 +58,11 @@ from stock_screener.jobs import (
     sweep_dead_runs,
     reset_running_row,
 )
+from stock_screener.data.providers import (
+    active_provider_name,
+    get_provider,
+    PROVIDERS,
+)
 
 
 # Bloomberg-terminal-style palette
@@ -2924,6 +2929,32 @@ def _render_data_health_panel():
     disruptive to work with while a long job was in flight.
     """
     st.markdown('<div class="mp-section-label">Data Health</div>', unsafe_allow_html=True)
+
+    # Active provider chip — shows which data source the batch jobs
+    # will actually hit. Green when a real provider is wired in
+    # (yfinance / massive), amber when it's a stub (bloomberg).
+    provider_name = active_provider_name()
+    try:
+        provider = get_provider()
+        provider_label = getattr(provider, "label", provider_name)
+        stub = provider_name == "bloomberg"
+    except Exception as e:
+        provider_label = f"{provider_name} — error"
+        stub = True
+        st.warning(f"Data provider error: {e}")
+    chip_color = WARN if stub else BULL
+    st.markdown(
+        f'<div style="background:{SURFACE};border:1px solid {BORDER};border-radius:8px;'
+        f'padding:6px 10px;margin-bottom:8px;display:flex;align-items:center;gap:8px;">'
+        f'<span style="width:6px;height:6px;border-radius:50%;background:{chip_color};'
+        f'display:inline-block;"></span>'
+        f'<span style="font-family:JetBrains Mono,monospace;font-size:0.68rem;'
+        f'color:{MUTED};text-transform:uppercase;letter-spacing:0.06em;">Data Source</span>'
+        f'<span style="margin-left:auto;font-family:JetBrains Mono,monospace;font-size:0.75rem;'
+        f'color:{TEXT};">{provider_label}</span>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
 
     # Self-heal any 'running' row whose process is gone or whose wall
     # clock exceeds the per-job cap. Runs every fragment tick so a
