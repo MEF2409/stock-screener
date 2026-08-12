@@ -55,6 +55,8 @@ from stock_screener.jobs import (
     is_job_running,
     latest_run_per_job,
     read_log_tail,
+    sweep_dead_runs,
+    reset_running_row,
 )
 
 
@@ -2910,19 +2912,31 @@ def _job_dot(run_row: dict | None, job_name: str) -> tuple[str, str]:
     return BULL, "ok"
 
 
+@st.fragment(run_every="10s")
 def _render_data_health_panel():
     """Sidebar panel: one row per job showing last-run status + a
-    'Run now' button. Reads job_runs, launches via jobs.launcher."""
+    'Run now' button. Reads job_runs, launches via jobs.launcher.
+
+    Wrapped in @st.fragment(run_every='10s') so only THIS block reruns
+    on the auto-refresh timer — the rest of the page (tabs, forms,
+    scroll position, active selections) is untouched. Previously used
+    a full-page window.parent.location.reload(), which was too
+    disruptive to work with while a long job was in flight.
+    """
     st.markdown('<div class="mp-section-label">Data Health</div>', unsafe_allow_html=True)
 
+    # Self-heal any 'running' row whose process is gone or whose wall
+    # clock exceeds the per-job cap. Runs every fragment tick so a
+    # crashed / restarted job's status is corrected within 10s without
+    # any user action.
+    sweep_dead_runs()
+
     latest = latest_run_per_job()
-    any_running = False
 
     for job in JOBS:
         row = latest.get(job.name)
         color, status_label = _job_dot(row, job.name)
         running = status_label == "running"
-        any_running = any_running or running
         ago = _fmt_ago(row["started_at"] if row else None)
         triggered = row.get("triggered_by") if row else None
         trig_chip = f" · {triggered}" if triggered and triggered != "cron" else ""
@@ -2945,17 +2959,27 @@ def _render_data_health_panel():
             unsafe_allow_html=True,
         )
 
+        # When a job is running we swap the Run-now button for a
+        # 'Reset' button so the user can immediately abandon a stuck
+        # run instead of waiting for the sweep threshold.
         btn_cols = st.columns([2, 1])
         with btn_cols[0]:
-            btn_label = "▶ Run now" if not running else "…running"
-            if st.button(btn_label, key=f"run_job_{job.name}",
-                         use_container_width=True, disabled=running):
-                ok, msg = launch_job(job.name, triggered_by="manual")
-                if ok:
-                    st.success(msg)
-                else:
-                    st.warning(msg)
-                st.rerun()
+            if running:
+                if st.button("⨯ Reset (stuck)", key=f"reset_job_{job.name}",
+                             use_container_width=True,
+                             help="Mark the current run as failed so you can retry."):
+                    if reset_running_row(job.name):
+                        st.warning(f"{job.label} run reset.")
+                    st.rerun()
+            else:
+                if st.button("▶ Run now", key=f"run_job_{job.name}",
+                             use_container_width=True):
+                    ok, msg = launch_job(job.name, triggered_by="manual")
+                    if ok:
+                        st.success(msg)
+                    else:
+                        st.warning(msg)
+                    st.rerun()
         with btn_cols[1]:
             if row and row.get("log_path"):
                 if st.button("📄", key=f"log_job_{job.name}",
@@ -2976,25 +3000,6 @@ def _render_data_health_panel():
                 f'color:{BEAR};padding:2px 4px;margin:-4px 0 8px 0;">{err_line[:120]}</div>',
                 unsafe_allow_html=True,
             )
-
-    # If anything's running, auto-refresh every 8s so the user sees
-    # 'running → success' without clicking anything.
-    #
-    # Do the refresh in the BROWSER, not on the Python side. A python
-    # `time.sleep(8) + st.rerun()` would freeze the entire Streamlit
-    # session for 8s at a stretch — and since the panel re-renders and
-    # sleeps again, the page stays unresponsive for the full duration
-    # of a long-running job (e.g. the 5-15 min daily refresh). Using
-    # window.parent.location.reload() means Python returns
-    # immediately and the browser reloads itself on a timer, so the
-    # rest of the page (tabs, buttons, forms) stays fully interactive.
-    if any_running:
-        st.caption("Auto-refreshing while a job runs…")
-        import streamlit.components.v1 as _components
-        _components.html(
-            "<script>setTimeout(function(){window.parent.location.reload();}, 8000);</script>",
-            height=0,
-        )
 
 
 def main():

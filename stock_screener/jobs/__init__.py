@@ -20,6 +20,8 @@ from stock_screener.jobs.queries import (
     latest_run_per_job,
     recent_runs,
     read_log_tail,
+    sweep_dead_runs,
+    reset_running_row,
 )
 
 __all__ = [
@@ -31,4 +33,6 @@ __all__ = [
     "latest_run_per_job",
     "recent_runs",
     "read_log_tail",
+    "sweep_dead_runs",
+    "reset_running_row",
 ]

@@ -1,7 +1,7 @@
 yfinance>=0.2.40
 pandas>=2.2.0
 numpy>=1.26.0
-streamlit>=1.32.0
+streamlit>=1.37.0  # @st.fragment(run_every=…) is stable from 1.37
 plotly>=5.20.0
 python-dateutil>=2.9.0
 pytz>=2024.1

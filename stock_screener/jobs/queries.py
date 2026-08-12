@@ -2,9 +2,106 @@
 
 from __future__ import annotations
 
+import os
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from stock_screener.data.db import get_connection
+
+
+# Per-job wall-clock ceilings. If a row has status='running' for
+# longer than this, sweep_dead_runs will auto-mark it as failed with
+# a 'timed out' message. Values are generous — the real observed
+# runtimes are ~15 min for daily_refresh and ~3-5 min for the morning
+# jobs. The extra headroom keeps a genuinely slow (but not dead) run
+# from getting killed on the display.
+_MAX_RUNTIME_MIN = {
+    "daily_refresh": 45,
+    "morning_fade": 20,
+    "morning_gap_scan": 20,
+}
+_DEFAULT_MAX_MIN = 30
+
+
+def _pid_alive(pid: int | None) -> bool:
+    """True if the given pid is alive on this machine. False if the pid
+    is gone or on a different machine (Fly restart wipes all pids)."""
+    if not pid:
+        return False
+    try:
+        os.kill(pid, 0)   # signal 0 = existence check, no-op
+        return True
+    except (ProcessLookupError, PermissionError, OSError):
+        return False
+
+
+def sweep_dead_runs() -> int:
+    """Reconcile 'running' rows that are dead in reality:
+      - pid gone (worker crashed or Fly restarted the machine)
+      - wall-clock age exceeds per-job max runtime (job is hung on
+        yfinance, an SSH tunnel, or an infinite loop)
+
+    Marks such rows as 'failed' with an explanatory message. Called
+    from the panel each render so the UI is always self-healing —
+    the user shouldn't ever need to manually reset a stuck run.
+
+    Returns the number of rows swept.
+    """
+    conn = get_connection()
+    now = datetime.utcnow()
+    swept = 0
+    rows = conn.execute(
+        "SELECT id, job_name, started_at, pid FROM job_runs WHERE status = 'running'"
+    ).fetchall()
+    for r in rows:
+        run_id, job_name, started_at, pid = r["id"], r["job_name"], r["started_at"], r["pid"]
+        try:
+            started = datetime.strptime(started_at, "%Y-%m-%d %H:%M:%S")
+        except (ValueError, TypeError):
+            continue
+        age_min = (now - started).total_seconds() / 60
+        max_min = _MAX_RUNTIME_MIN.get(job_name, _DEFAULT_MAX_MIN)
+
+        reason: str | None = None
+        if not _pid_alive(pid):
+            reason = f"Process (pid {pid}) is gone — worker crashed or the machine restarted."
+        elif age_min > max_min:
+            reason = f"Timed out — running for {int(age_min)} min (cap {max_min})."
+
+        if reason:
+            conn.execute(
+                "UPDATE job_runs SET status='failed', finished_at=?, message=? WHERE id=?",
+                (now.strftime("%Y-%m-%d %H:%M:%S"), reason, run_id),
+            )
+            swept += 1
+    if swept:
+        conn.commit()
+    conn.close()
+    return swept
+
+
+def reset_running_row(job_name: str) -> bool:
+    """Force-mark the latest 'running' row for this job as failed.
+    Used by the 'Reset' button when the user knows the run is stuck
+    and doesn't want to wait for the auto-sweep threshold."""
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT id FROM job_runs WHERE job_name = ? AND status = 'running' "
+        "ORDER BY started_at DESC LIMIT 1",
+        (job_name,),
+    ).fetchone()
+    if row is None:
+        conn.close()
+        return False
+    now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    conn.execute(
+        "UPDATE job_runs SET status='failed', finished_at=?, "
+        "message='Manually reset from dashboard.' WHERE id=?",
+        (now, row["id"]),
+    )
+    conn.commit()
+    conn.close()
+    return True
 
 
 def latest_run_per_job() -> dict[str, dict]:
