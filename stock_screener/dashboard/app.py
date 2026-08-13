@@ -49,6 +49,7 @@ from stock_screener.trades.trades import (
     update_trade,
 )
 from stock_screener.exits import evaluate_exit, SETUP_CHOICES
+from stock_screener.scanners.history import first_seen_dates
 from stock_screener.jobs import (
     JOBS,
     launch_job,
@@ -2520,10 +2521,16 @@ def scanner_results_table(scanner_name: str, results: list, filter_text: str = "
         )
         return
 
+    # Lookup: earliest date each ticker appeared in this scanner's
+    # history. Answers Ryan's diagnostic — 'is this list stale because
+    # nothing new qualifies, or because the job didn't run?'
+    first_seen = first_seen_dates(scanner_name)
+
     rows = []
     for result in results:
         ticker = result["ticker"]
         row = {"Ticker": ticker, "Catalyst": (result.get("catalyst") or "none").lower()}
+        row["First Seen"] = _fmt_first_seen(first_seen.get(ticker))
         if "open" in result:
             row["Open"] = result.get("open")
             # `close` from gap scanners is the PRIOR session's close (the
@@ -2862,6 +2869,29 @@ def _render_admin_panel():
                     if st.button("Remove", key=f"del_{u['username']}", use_container_width=True):
                         delete_user(u["username"])
                         st.rerun()
+
+
+def _fmt_first_seen(date_str: str | None) -> str:
+    """Compact 'first-seen' label for the scanner tables.
+      today            -> 'new'
+      1-6 days ago     -> '{n}d ago'
+      >1w              -> 'M/D' (e.g. '8/7')
+      None (no history)-> '—'
+    """
+    if not date_str:
+        return "—"
+    from datetime import datetime as _dt
+    try:
+        first = _dt.strptime(date_str, "%Y-%m-%d").date()
+    except ValueError:
+        return date_str
+    today = _dt.utcnow().date()
+    days = (today - first).days
+    if days <= 0:
+        return "new"
+    if days < 7:
+        return f"{days}d ago"
+    return first.strftime("%-m/%-d")
 
 
 def _fmt_ago(ts_str: str | None) -> str:

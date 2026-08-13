@@ -17,6 +17,7 @@ from stock_screener.data.db import get_connection
 # from getting killed on the display.
 _MAX_RUNTIME_MIN = {
     "daily_refresh": 45,
+    "run_scanners": 10,   # in-memory only; should complete in seconds
     "morning_fade": 20,
     "morning_gap_scan": 20,
 }

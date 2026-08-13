@@ -26,6 +26,12 @@ JOBS: list[JobDef] = [
         description="Rebuilds the universe, refreshes 1yr OHLCV, runs all four EOD scanners.",
     ),
     JobDef(
+        name="run_scanners",
+        label="Run Scanners",
+        script=REPO_ROOT / "scripts" / "run_scanners.py",
+        description="Reruns the 4 scanners against existing OHLCV. No universe rebuild, no data pull.",
+    ),
+    JobDef(
         name="morning_fade",
         label="Morning Fade",
         script=REPO_ROOT / "scripts" / "morning_fade.py",

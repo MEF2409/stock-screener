@@ -5,7 +5,7 @@ filters out non-common-stock instruments, and applies price/volume qualification
 """
 
 import io
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List
 
 import pandas as pd
@@ -13,6 +13,7 @@ import requests
 import yfinance as yf
 
 from stock_screener.data.db import get_connection
+from stock_screener.data.fetcher import fetch_ohlcv_bulk
 
 
 NASDAQ_LISTED_URL = "https://www.nasdaqtrader.com/dynamic/symdir/nasdaqlisted.txt"
@@ -93,23 +94,53 @@ def _fetch_quick_quote(ticker: str) -> tuple[float | None, int | None]:
 
 def get_qualified_stocks(min_price: float = 5.0, min_avg_volume: int = 500000,
                         progress_callback=None) -> pd.DataFrame:
-    """Filter stocks meeting price/volume criteria. Optional progress callback."""
+    """Filter stocks meeting price/volume criteria.
+
+    Was: N × per-ticker yf.download calls (60d each), taking hours on
+    yfinance and being the actual cause of daily_refresh hanging at
+    Step 1 even after we swapped the OHLCV step to Massive.
+
+    Now: one bulk call through the active MarketDataProvider. On
+    Massive that's ~40 parallel grouped-daily HTTP calls (one per
+    trading day in the last 60), each returning every US stock —
+    completes in seconds. On yfinance it's still chunked bulk
+    downloads (better than per-ticker) but the real fix is running
+    under DATA_PROVIDER=massive.
+    """
     listed = fetch_listed_symbols()
-    print(f"Screening {len(listed)} listed symbols (filter: ${min_price}+, {min_avg_volume:,}+ avg vol)...")
+    tickers = listed["ticker"].tolist()
+    print(f"Screening {len(tickers)} listed symbols (filter: ${min_price}+, {min_avg_volume:,}+ avg vol)...")
+
+    end_date = datetime.now().strftime("%Y-%m-%d")
+    start_date = (datetime.now() - timedelta(days=90)).strftime("%Y-%m-%d")
+
+    if progress_callback:
+        try:
+            progress_callback(0, len(tickers), "bulk-fetch")
+        except Exception:
+            pass
+
+    bulk = fetch_ohlcv_bulk(tickers, start_date, end_date)
+    print(f"Bulk fetch: got data for {len(bulk)} / {len(tickers)} tickers")
 
     qualified = []
     for i, row in enumerate(listed.itertuples(index=False)):
         ticker = row.ticker
-        if (i + 1) % 100 == 0:
-            print(f"  Progress: {i + 1}/{len(listed)}  (qualified so far: {len(qualified)})")
+        if (i + 1) % 500 == 0:
+            print(f"  Filter progress: {i + 1}/{len(tickers)}  (qualified so far: {len(qualified)})")
         if progress_callback:
             try:
-                progress_callback(i + 1, len(listed), ticker)
+                progress_callback(i + 1, len(tickers), ticker)
             except Exception:
                 pass
 
-        price, avg_vol = _fetch_quick_quote(ticker)
-        if price is None or avg_vol is None:
+        df = bulk.get(ticker)
+        if df is None or len(df) < 30:
+            continue
+        try:
+            price = float(df["Close"].iloc[-1])
+            avg_vol = int(df["Volume"].tail(30).mean())
+        except (KeyError, ValueError, TypeError):
             continue
         if price >= min_price and avg_vol >= min_avg_volume:
             qualified.append({
